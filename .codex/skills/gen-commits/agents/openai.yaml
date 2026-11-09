@@ -1,0 +1,4 @@
+interface:
+  display_name: "gen-commits"
+  short_description: "Split changes into clean local commits"
+  default_prompt: "Use $gen-commits to inspect the working tree, split the changes into clean local commits, and finish with a docs update commit when needed."
