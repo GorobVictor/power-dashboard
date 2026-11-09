@@ -1,24 +1,27 @@
+"use client";
+
 import { ChevronDown, History } from "lucide-react";
 import Form from "next/form";
-import { Suspense } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, inputClassName } from "@/components/ui/input";
-import { isQueue, isScheduleDate, kyivDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
-import { getCurrentOutages, getOutageHistory } from "@/server/outages/service";
-import { clockTime, outageIntervals } from "./outage-intervals";
+import { operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
+import { CardCarousel } from "./card-carousel";
+import { useDashboardLive } from "./live";
+import { clockTime, outageIntervals, outageQueues } from "./outage-intervals";
 import { PanelSkeleton, StatusBadge, Timestamp } from "./panel";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", {
   timeZone, weekday: "long", day: "numeric", month: "long", year: "numeric",
 });
-const queueOrder = new Intl.Collator("uk-UA", { numeric: true });
 const statuses = {
   ScheduleApplies: { label: "Діє графік", tone: "warning" },
   WaitingForSchedule: { label: "Очікується графік", tone: "muted" },
   NoShutdowns: { label: "Без відключень", tone: "success" },
   EmergencyShutdowns: { label: "Аварійні обмеження", tone: "danger" },
 } as const;
+const minutesPerDay = 24 * 60;
 
 function ScheduleDate({ value }: { value: string }) {
   return <time dateTime={value}>{dateFormat.format(new Date(`${value}T00:00:00Z`))}</time>;
@@ -46,6 +49,28 @@ function Intervals({ hours, possible = false }: { hours: ScheduleContent["hours"
   );
 }
 
+function ScheduleTimeline({ hours, possible }: Pick<ScheduleContent, "hours" | "possible">) {
+  if (!hours.length && !possible.length) return null;
+
+  return (
+    <div aria-hidden="true" className="rounded-lg bg-muted/50 px-2.5 py-2">
+      <div className="relative h-4 overflow-hidden rounded-sm bg-card">
+        {outageIntervals(hours).map(({ start, end, kind }) => (
+          <span key={start} className={`absolute inset-y-0 ${kind === "emergency" ? "bg-danger" : "bg-warning/60"}`}
+            style={{ left: `${start / minutesPerDay * 100}%`, right: `${(minutesPerDay - end) / minutesPerDay * 100}%` }} />
+        ))}
+        {outageIntervals(possible).map(({ start, end, kind }) => (
+          <span key={start} className={`absolute bottom-0 h-1 border-t border-dashed ${kind === "emergency" ? "bg-danger" : "bg-muted-foreground/65"}`}
+            style={{ left: `${start / minutesPerDay * 100}%`, right: `${(minutesPerDay - end) / minutesPerDay * 100}%` }} />
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[0.625rem] text-muted-foreground tabular-nums">
+        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleDay({ day }: { day: Pick<ScheduleContent, "status" | "hours" | "possible"> }) {
   const { label, tone } = statuses[day.status];
   return (
@@ -57,9 +82,10 @@ function ScheduleDay({ day }: { day: Pick<ScheduleContent, "status" | "hours" | 
   );
 }
 
-function ScheduleDetails({ schedule }: { schedule: ScheduleContent }) {
+export function ScheduleDetails({ schedule, showTimeline = false }: { schedule: ScheduleContent; showTimeline?: boolean }) {
   return (
     <div className="space-y-4">
+      {showTimeline && <ScheduleTimeline hours={schedule.hours} possible={schedule.possible} />}
       <ScheduleDay day={schedule} />
       {schedule.publishedSchedule && (
         <div className="space-y-2 rounded-lg border border-dashed p-3">
@@ -72,50 +98,22 @@ function ScheduleDetails({ schedule }: { schedule: ScheduleContent }) {
   );
 }
 
-async function HistoryResults({ date, queue }: { date: string; queue: string | null }) {
-  let versions: Awaited<ReturnType<typeof getOutageHistory>>;
-  try {
-    versions = await getOutageHistory(date, queue);
-  } catch (error) {
-    console.error("Unable to load dashboard outage history", (error as Error).name);
-    return <p className="text-sm text-danger">Історія тимчасово недоступна. Спробуйте оновити дашборд.</p>;
-  }
+export function OutagesPanel({ date, requestedQueue, historyOpen, history }: {
+  date: string | null;
+  requestedQueue: string | null | undefined;
+  historyOpen: boolean;
+  history: ReactNode;
+}) {
+  const { outages: current, outagesStale, today, connection } = useDashboardLive();
+  if (!current && connection === "connecting") return <PanelSkeleton label="Завантаження графіків відключень" />;
 
-  if (!versions.length) return <p className="text-sm text-muted-foreground">За вибрану дату немає збережених версій.</p>;
-
-  return (
-    <ol className="space-y-2.5" aria-label="Збережені версії графіка">
-      {versions.map((version, index) => (
-        <li key={`${version.queue}-${version.observedAt.toISOString()}-${index}`} className="space-y-3 rounded-lg border p-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-1.5">
-            <p className="text-sm font-medium">Версія {index + 1} · Черга {version.queue}</p>
-            <p className="text-xs text-muted-foreground"><Timestamp value={version.observedAt} /></p>
-          </div>
-          <ScheduleDetails schedule={version} />
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-export async function OutagesPanel({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
-  const params = await searchParams;
-  const now = new Date();
-  const today = kyivDate(now);
-  const date = isScheduleDate(params.date) ? params.date : null;
-
-  let current: Awaited<ReturnType<typeof getCurrentOutages>> | null = null;
-  try {
-    current = await getCurrentOutages(null, now);
-  } catch (error) {
-    console.error("Unable to load dashboard outage schedules", (error as Error).name);
-  }
-
-  const queues = [...new Set(current?.schedules.map(({ queue }) => queue))].sort(queueOrder.compare);
-  const queue = params.queue === "all" ? null : isQueue(params.queue) ? params.queue : queues[0] ?? null;
+  const tomorrow = today ? new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10) : "";
+  const currentSchedules = current?.schedules.filter((schedule) => schedule.date >= today) ?? [];
+  const queues = outageQueues(currentSchedules);
+  const queue = requestedQueue === undefined ? queues[0] ?? null : requestedQueue;
   if (queue && !queues.includes(queue)) queues.push(queue);
   const selectedQueue = queue ?? "all";
-  const schedules = current?.schedules.filter((schedule) => queue === null || schedule.queue === queue) ?? [];
+  const schedules = currentSchedules.filter((schedule) => queue === null || schedule.queue === queue);
 
   return (
     <>
@@ -123,9 +121,10 @@ export async function OutagesPanel({ searchParams }: { searchParams: PageProps<"
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-lg">Актуальний графік</CardTitle>
-            {current?.stale === true && <StatusBadge tone="warning">Застарілий графік</StatusBadge>}
-            {current?.stale === false && <StatusBadge tone="success">Джерело оновлено</StatusBadge>}
-            {current?.stale === null && <StatusBadge tone="muted">Очікуємо дані</StatusBadge>}
+            {current?.lastSuccessfulPollAt && (outagesStale
+              ? <StatusBadge tone="warning">Застарілий графік</StatusBadge>
+              : <StatusBadge tone="success">Джерело оновлено</StatusBadge>)}
+            {current?.lastSuccessfulPollAt === null && <StatusBadge tone="muted">Очікуємо дані</StatusBadge>}
             {!current && <StatusBadge tone="danger">Дані недоступні</StatusBadge>}
           </div>
           <CardDescription>{operator.name} · київський час</CardDescription>
@@ -158,19 +157,26 @@ export async function OutagesPanel({ searchParams }: { searchParams: PageProps<"
           )}
         </CardContent>
       </Card>
-      {schedules.map((schedule) => (
-        <Card key={`${schedule.queue}-${schedule.date}`}>
-          <CardHeader>
-            <CardTitle className="first-letter:uppercase"><ScheduleDate value={schedule.date} /></CardTitle>
-            <CardDescription>Черга {schedule.queue}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScheduleDetails schedule={schedule} />
-          </CardContent>
-        </Card>
-      ))}
+      <CardCarousel label="Графіки відключень" key={selectedQueue} slides={schedules.map((schedule) => ({
+        id: `${schedule.queue}-${schedule.date}`,
+        content: (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs font-semibold text-muted-foreground">
+                {schedule.date === today && <span className="text-warning">Сьогодні</span>}
+                {schedule.date === tomorrow && <span>Завтра</span>}
+                <span>Черга {schedule.queue}</span>
+              </div>
+              <CardTitle className="first-letter:uppercase"><ScheduleDate value={schedule.date} /></CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScheduleDetails schedule={schedule} showTimeline />
+            </CardContent>
+          </Card>
+        ),
+      }))} />
       <Card className="py-0">
-        <details className="group" open={params.date !== undefined}>
+        <details className="group" open={historyOpen}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-4 py-4 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:px-5 [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-2"><History aria-hidden="true" className="size-4" /> Історія змін</span>
             <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground group-open:rotate-180" />
@@ -184,11 +190,7 @@ export async function OutagesPanel({ searchParams }: { searchParams: PageProps<"
               </div>
               <Button type="submit" variant="outline">Показати</Button>
             </Form>
-            {date ? (
-              <Suspense key={`${selectedQueue}-${date}`} fallback={<PanelSkeleton label="Завантаження історії графіків" />}>
-                <HistoryResults date={date} queue={queue} />
-              </Suspense>
-            ) : params.date !== undefined && <p className="text-sm text-danger">Виберіть коректну дату графіка.</p>}
+            {date ? history : historyOpen && <p className="text-sm text-danger">Виберіть коректну дату графіка.</p>}
           </CardContent>
         </details>
       </Card>

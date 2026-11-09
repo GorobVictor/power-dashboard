@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_ENV=development node src/server/web.ts",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node src/server/web.ts",
     "lint": "eslint",
     "bootstrap": "node --env-file-if-exists=.env src/server/bootstrap.ts",
     "worker": "node --env-file-if-exists=.env src/server/worker.ts",
@@ -23,7 +23,8 @@
     "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
@@ -31,6 +32,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",

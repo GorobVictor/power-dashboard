@@ -21,7 +21,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       dbClient: db, dir: "migrations", direction: "up",
       schema, createSchema: true, migrationsTable: "pgmigrations",
     });
-    assert.equal((await migrate()).length, 2);
+    assert.equal((await migrate()).length, 3);
     const first = {
       id: "793319323732595650000001", name: "First", model: "VNSE3-0",
       deviceId: "first-device", bleMac: "02:00:00:00:00:01",
@@ -39,10 +39,27 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     const old = { ...metrics, socPct: 18, measuredAt: new Date("2026-01-01T00:00:00Z") };
     const latest = { ...metrics, socPct: 0, measuredAt: new Date("2026-01-01T00:00:01Z") };
     const otherLatest = { ...latest, socPct: 87, batteryPowerW: null, totalEnergyInWh: 42_949_672_950 };
+    const updates: { stationId: string; measurement: { socPct: number | null } }[] = [];
+    other.on("notification", ({ payload }) => {
+      if (payload) updates.push(JSON.parse(payload));
+    });
+    await other.query("LISTEN power_dashboard_updates");
+    await db.query("BEGIN");
     await saveMeasurement(db, first.id, latest);
+    await other.query("SELECT 1");
+    assert.equal(updates.length, 0);
+    await db.query("COMMIT");
     await saveMeasurement(db, first.id, old);
     await saveMeasurement(db, first.id, { ...latest, socPct: 10 });
     await saveMeasurement(db, second.id, otherLatest);
+    await db.query("BEGIN");
+    await saveMeasurement(db, first.id, { ...latest, measuredAt: new Date("2026-01-01T00:00:02Z") });
+    await db.query("ROLLBACK");
+    await other.query("SELECT 1");
+    await other.query("UNLISTEN power_dashboard_updates");
+    assert.deepEqual(updates.map(({ stationId, measurement }) => [stationId, measurement.socPct]), [
+      [first.id, 0], [first.id, 18], [second.id, 87],
+    ]);
     assert.equal((await migrate()).length, 0);
     await registerStation(db, first);
     await assert.rejects(registerStation(db, { ...first, deviceId: "different" }), /different device/);

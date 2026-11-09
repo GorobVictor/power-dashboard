@@ -31,15 +31,19 @@ export function createDashboardSession(key: string, now = Date.now()) {
   return sealData({ expiresAt: now + sessionLifetimeSeconds * 1_000 }, { password: key, ttl: sessionLifetimeSeconds });
 }
 
-export async function isDashboardSessionValid(token: string | undefined, key: string, now?: number) {
-  if (!token) return false;
+export async function dashboardSessionExpiration(token: string | undefined, key: string, now?: number) {
+  if (!token) return null;
   try {
     const { expiresAt } = await unsealData<{ expiresAt?: number }>(token, {
       password: key,
       ttl: sessionLifetimeSeconds,
     });
-    return typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > (now ?? Date.now());
+    return typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > (now ?? Date.now()) ? expiresAt : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function isDashboardSessionValid(token: string | undefined, key: string, now?: number) {
+  return (await dashboardSessionExpiration(token, key, now)) !== null;
 }

@@ -19,8 +19,8 @@ export function database(): Pool {
   return pool;
 }
 
-export function databaseClient(): Client {
-  return new Client(connectionOptions);
+export function databaseClient(applicationName?: string): Client {
+  return new Client({ ...connectionOptions, application_name: applicationName });
 }
 
 export function databaseErrorMessage(error: unknown): string {

@@ -1,7 +1,10 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getLatestMeasurement } from "@/server/stations/service";
-import { PanelMessage, StatusBadge, Timestamp } from "./panel";
+import { CardCarousel } from "./card-carousel";
+import { useDashboardLive } from "./live";
+import { PanelMessage, PanelSkeleton, StatusBadge, Timestamp } from "./panel";
 
 const numberFormat = new Intl.NumberFormat("uk-UA");
 const signedNumberFormat = new Intl.NumberFormat("uk-UA", { signDisplay: "exceptZero" });
@@ -30,73 +33,76 @@ function Metric({ label, value, description }: { label: string; value: ReactNode
   );
 }
 
-export async function BatteryPanel() {
-  const stationId = process.env.STATION_ID?.trim();
-  if (!stationId) {
+export function BatteryPanel() {
+  const { station: latest, stationStale: stale, connection } = useDashboardLive();
+  if (!latest) {
+    return connection === "disconnected"
+      ? <PanelMessage title="Показники тимчасово недоступні">Очікуємо на відновлення з’єднання.</PanelMessage>
+      : <PanelSkeleton label="Завантаження показників акумулятора" />;
+  }
+  if (latest.kind === "unconfigured") {
     return <PanelMessage title="Станцію не налаштовано">Додайте внутрішній ID станції до конфігурації дашборда.</PanelMessage>;
   }
 
-  let latest: Awaited<ReturnType<typeof getLatestMeasurement>>;
-  try {
-    latest = await getLatestMeasurement(stationId);
-  } catch (error) {
-    console.error("Unable to load dashboard battery data", (error as Error).name);
-    return <PanelMessage title="Показники тимчасово недоступні">Спробуйте оновити дашборд.</PanelMessage>;
-  }
-
-  if (!latest) {
+  if (latest.kind === "missing") {
     return <PanelMessage title="Станцію не знайдено">Перевірте, чи зареєстровано станцію з налаштованим ID.</PanelMessage>;
   }
 
-  const { station, measurement, stale } = latest;
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="min-w-0 text-lg break-words">{station.name}</CardTitle>
-            {measurement ? (
-              <StatusBadge tone={stale ? "warning" : "success"}>
-                {stale ? "Застарілі показники" : "Актуальні показники"}
-              </StatusBadge>
-            ) : <StatusBadge tone="muted">Немає вимірів</StatusBadge>}
-          </div>
-          <CardDescription className="break-words">{station.model}</CardDescription>
-        </CardHeader>
-        <CardContent>
+  const { station, measurement } = latest;
+  const overview = (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="min-w-0 text-lg break-words">{station.name}</CardTitle>
           {measurement ? (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-success-surface p-4">
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-success">Рівень заряду</span>
-                  <span className="text-3xl font-bold tracking-tight text-success tabular-nums">
-                    {metric(measurement.socPct, "%")}
-                  </span>
-                </div>
-                {measurement.socPct !== null && (
-                  <progress aria-label="Рівень заряду" value={measurement.socPct} max={100} className="charge-progress" />
-                )}
+            <StatusBadge tone={stale ? "warning" : "success"}>
+              {stale ? "Застарілі показники" : "Актуальні показники"}
+            </StatusBadge>
+          ) : <StatusBadge tone="muted">Немає вимірів</StatusBadge>}
+        </div>
+        <CardDescription className="break-words">{station.model}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {measurement ? (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-success-surface p-4">
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-medium text-success">Рівень заряду</span>
+                <span className="text-3xl font-bold tracking-tight text-success tabular-nums">
+                  {metric(measurement.socPct, "%")}
+                </span>
               </div>
-              <dl className="grid grid-cols-2 gap-2.5">
-                <Metric label="Залишок енергії" value={metric(measurement.remainingEnergyWh, "Вт·год")} />
-                <Metric
-                  label="Потужність батареї"
-                  value={metric(measurement.batteryPowerW, "Вт", true)}
-                  description={measurement.batteryPowerW === null ? undefined :
-                    measurement.batteryPowerW > 0 ? "Заряд" : measurement.batteryPowerW < 0 ? "Розряд" : "У спокої"}
-                />
-              </dl>
-              <p className="text-xs text-muted-foreground">
-                Останній вимір <Timestamp value={measurement.measuredAt} /> за Києвом.
-              </p>
+              {measurement.socPct !== null && (
+                <progress aria-label="Рівень заряду" value={measurement.socPct} max={100} className="charge-progress" />
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Очікуємо на перший успішний вимір зі станції.</p>
-          )}
-        </CardContent>
-      </Card>
-      {measurement && (
-        <>
+            <dl className="grid grid-cols-2 gap-2.5">
+              <Metric label="Залишок енергії" value={metric(measurement.remainingEnergyWh, "Вт·год")} />
+              <Metric
+                label="Потужність батареї"
+                value={metric(measurement.batteryPowerW, "Вт", true)}
+                description={measurement.batteryPowerW === null ? undefined :
+                  measurement.batteryPowerW > 0 ? "Заряд" : measurement.batteryPowerW < 0 ? "Розряд" : "У спокої"}
+              />
+            </dl>
+            <p className="text-xs text-muted-foreground">
+              Останній вимір <Timestamp value={measurement.measuredAt} /> за Києвом.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Очікуємо на перший успішний вимір зі станції.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+  if (!measurement) return overview;
+
+  return (
+    <CardCarousel label="Картки акумулятора" slides={[
+      { id: "overview", content: overview },
+      {
+        id: "power",
+        content: (
           <Card>
             <CardHeader>
               <CardTitle>Потужність і режим</CardTitle>
@@ -112,12 +118,17 @@ export async function BatteryPanel() {
               </dl>
             </CardContent>
           </Card>
+        ),
+      },
+      {
+        id: "energy",
+        content: (
           <Card>
             <CardHeader>
               <CardTitle>Лічильники енергії</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 min-[500px]:grid-cols-3">
                 {[
                   { label: "За добу", input: measurement.dailyEnergyInWh, output: measurement.dailyEnergyOutWh },
                   { label: "За місяць", input: measurement.monthlyEnergyInWh, output: measurement.monthlyEnergyOutWh },
@@ -125,7 +136,7 @@ export async function BatteryPanel() {
                 ].map(({ label, input, output }) => (
                   <div key={label}>
                     <h4 className="mb-1.5 text-sm font-semibold">{label}</h4>
-                    <dl className="grid grid-cols-2 gap-1.5 sm:grid-cols-1">
+                    <dl className="grid grid-cols-2 gap-1.5 min-[500px]:grid-cols-1">
                       <Metric label="Заряд" value={metric(input, "Вт·год")} />
                       <Metric label="Розряд" value={metric(output, "Вт·год")} />
                     </dl>
@@ -134,8 +145,8 @@ export async function BatteryPanel() {
               </div>
             </CardContent>
           </Card>
-        </>
-      )}
-    </>
+        ),
+      },
+    ]} />
   );
 }

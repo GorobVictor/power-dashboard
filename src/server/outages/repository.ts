@@ -2,12 +2,12 @@ import type { Client, Pool } from "pg";
 import { area, operator } from "./schedules.ts";
 import type { Schedule, ScheduleVersion } from "./schedules.ts";
 
-const source = `alerts.energy:${area}:${operator.id}`;
+export const outageSourceId = `alerts.energy:${area}:${operator.id}`;
 
 export async function lockOutageSource(db: Client): Promise<boolean> {
   const { rows } = await db.query<{ acquired: boolean }>(
     "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
-    [source],
+    [outageSourceId],
   );
   return rows[0].acquired;
 }
@@ -38,7 +38,7 @@ export async function saveOutagePoll(db: Client, schedules: Schedule[], observed
      ON CONFLICT (source) DO UPDATE SET
        last_successful_poll_at = EXCLUDED.last_successful_poll_at,
        current_version_ids = EXCLUDED.current_version_ids`,
-    [source, JSON.stringify(schedules), observedAt],
+    [outageSourceId, JSON.stringify(schedules), observedAt],
   );
 }
 
@@ -61,7 +61,7 @@ export async function findCurrentSchedules(db: Pool | Client, from: string, queu
        AND v.schedule_date >= $2::date AND ($3::text IS NULL OR v.queue = $3)
      WHERE state.source = $1
      ORDER BY v.schedule_date, v.queue`,
-    [source, from, queue],
+    [outageSourceId, from, queue],
   );
 
   return {

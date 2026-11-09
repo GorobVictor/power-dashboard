@@ -1,5 +1,11 @@
 import type { ScheduleContent } from "../../server/outages/schedules.ts";
 
+const queueOrder = new Intl.Collator("uk-UA", { numeric: true });
+
+export function outageQueues(schedules: readonly { queue: string }[]) {
+  return [...new Set(schedules.map(({ queue }) => queue))].sort(queueOrder.compare);
+}
+
 type Kind = "planned" | "emergency";
 type Interval = { start: number; end: number; kind: Kind };
 

@@ -7,8 +7,9 @@ const dateTimeFormat = new Intl.DateTimeFormat("uk-UA", {
   timeZone, dateStyle: "medium", timeStyle: "medium",
 });
 
-export function Timestamp({ value }: { value: Date }) {
-  return <time dateTime={value.toISOString()} className="tabular-nums">{dateTimeFormat.format(value)}</time>;
+export function Timestamp({ value }: { value: Date | string }) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return <time dateTime={date.toISOString()} className="tabular-nums">{dateTimeFormat.format(date)}</time>;
 }
 
 const tones = {

@@ -3,7 +3,7 @@ import { findCurrentSchedules, findScheduleHistory } from "./repository.ts";
 import { area, kyivDate, operator, timeZone } from "./schedules.ts";
 
 export const outageSource = { area, operator, timeZone };
-const staleAfterMs = 180_000;
+export const outageStaleAfterMs = 180_000;
 
 const readCurrent = (from: string, queue: string | null) => findCurrentSchedules(database(), from, queue);
 
@@ -13,7 +13,7 @@ export async function getCurrentOutages(queue: string | null, now = new Date(), 
   return {
     ...outageSource,
     ...current,
-    stale: lastPoll ? now.getTime() - lastPoll.getTime() >= staleAfterMs : null,
+    stale: lastPoll ? now.getTime() - lastPoll.getTime() >= outageStaleAfterMs : null,
   };
 }
 

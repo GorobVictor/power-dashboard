@@ -30,6 +30,8 @@ export interface Measurement extends Metrics {
   measuredAt: Date;
 }
 
+export type SerializedMeasurement = Metrics & { measuredAt: string };
+
 export interface LatestMeasurement {
   station: Station;
   measurement: Measurement | null;

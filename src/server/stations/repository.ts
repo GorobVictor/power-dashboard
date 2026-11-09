@@ -1,5 +1,5 @@
 import type { Client, Pool } from "pg";
-import type { CollectorStation, LatestMeasurement, Measurement } from "./types.ts";
+import type { CollectorStation, LatestMeasurement, Measurement, SerializedMeasurement, Station } from "./types.ts";
 
 export async function registerStation(db: Client, station: CollectorStation) {
   const { rowCount } = await db.query(
@@ -49,34 +49,20 @@ export async function saveMeasurement(db: Client, stationId: string, measurement
 }
 
 export async function findLatest(db: Pool | Client, stationId: string): Promise<LatestMeasurement | null> {
-  const { rows } = await db.query<{
-    id: string;
-    name: string;
-    model: string;
-    measuredAt: Date | null;
-    metrics: Omit<Measurement, "measuredAt">;
-  }>(
-    `SELECT s.id, s.name, s.model, m.measured_at AS "measuredAt",
-       jsonb_build_object(
-         'socPct', m.soc_pct, 'remainingEnergyWh', m.remaining_energy_wh,
-         'batteryPowerW', m.battery_power_w, 'gridPowerW', m.grid_power_w,
-         'acOutputPowerW', m.ac_output_power_w, 'backupLoadPowerW', m.backup_load_power_w,
-         'inverterState', m.inverter_state, 'workMode', m.work_mode,
-         'dailyEnergyInWh', m.daily_energy_in_wh, 'dailyEnergyOutWh', m.daily_energy_out_wh,
-         'monthlyEnergyInWh', m.monthly_energy_in_wh, 'monthlyEnergyOutWh', m.monthly_energy_out_wh,
-         'totalEnergyInWh', m.total_energy_in_wh, 'totalEnergyOutWh', m.total_energy_out_wh
-       ) AS metrics
+  const { rows } = await db.query<Station & { measurement: SerializedMeasurement | null }>(
+    `SELECT s.id, s.name, s.model, m.measurement
      FROM stations s
      LEFT JOIN LATERAL (
-       SELECT * FROM measurements WHERE station_id = s.id ORDER BY measured_at DESC LIMIT 1
+       SELECT dashboard_measurement_json(latest) AS measurement FROM measurements latest
+       WHERE station_id = s.id ORDER BY measured_at DESC LIMIT 1
      ) m ON true
      WHERE s.id = $1`,
     [stationId],
   );
-  const row = rows[0];
-  if (!row) return null;
+  if (!rows.length) return null;
+  const { measurement, ...station } = rows[0];
   return {
-    station: { id: row.id, name: row.name, model: row.model },
-    measurement: row.measuredAt ? { measuredAt: row.measuredAt, ...row.metrics } : null,
+    station,
+    measurement: measurement ? { ...measurement, measuredAt: new Date(measurement.measuredAt) } : null,
   };
 }
