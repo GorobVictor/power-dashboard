@@ -2,20 +2,28 @@
   "name": "power-dashboard",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bootstrap": "node src/server/bootstrap.ts",
+    "worker": "node src/server/worker.ts",
+    "test": "node --test tests/*.test.ts"
   },
   "dependencies": {
+    "dbus-next": "^0.10.2",
     "next": "16.4.6",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",

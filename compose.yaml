@@ -1,0 +1,84 @@
+x-database-env: &database-env
+  PGHOST: db
+  PGPORT: "5432"
+  PGDATABASE: power_dashboard
+  PGUSER: power_dashboard
+  PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+name: power-dashboard
+
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: power_dashboard
+      POSTGRES_USER: power_dashboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "power_dashboard", "-d", "power_dashboard"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  bootstrap:
+    image: ${COMPOSE_PROJECT_NAME:-power-dashboard}-worker:local
+    build:
+      context: .
+      target: worker
+    command: ["node", "src/server/bootstrap.ts"]
+    environment:
+      <<: *database-env
+      STATION_ID: ${STATION_ID:-}
+      STATION_NAME: ${STATION_NAME:-}
+      STATION_MODEL: ${STATION_MODEL:-}
+      STATION_DEVICE_ID: ${STATION_DEVICE_ID:-}
+      STATION_BLE_MAC: ${STATION_BLE_MAC:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    environment:
+      <<: *database-env
+      API_USERNAME: ${API_USERNAME:?Set API_USERNAME in .env}
+      API_PASSWORD: ${API_PASSWORD:?Set API_PASSWORD in .env}
+      STALE_AFTER_MS: ${STALE_AFTER_MS:-5000}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    image: ${COMPOSE_PROJECT_NAME:-power-dashboard}-worker:local
+    build:
+      context: .
+      target: worker
+    init: true
+    cap_drop: [ALL]
+    environment:
+      <<: *database-env
+      DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+      BLE_ADAPTER: ${BLE_ADAPTER:-hci0}
+      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-1000}
+    volumes:
+      - type: bind
+        source: /run/dbus/system_bus_socket
+        target: /run/dbus/system_bus_socket
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
