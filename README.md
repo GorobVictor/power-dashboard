@@ -1,8 +1,23 @@
 # Power Dashboard
 
-Збір телеметрії Marstek Venus E 3.0 (`VNSE3-0`, EMS 150) через Bluetooth Low Energy. Node.js воркер використовує `dbus-next` і BlueZ на Ubuntu. PostgreSQL зберігає історію для кожної станції. Next.js надає останній вимір через HTTP API.
+Збір телеметрії Marstek Venus E 3.0 (`VNSE3-0`, EMS 150) через Bluetooth Low Energy. Воркер використовує `dbus-next` і BlueZ на Ubuntu, а на macOS — `@stoprocent/noble` і CoreBluetooth. PostgreSQL зберігає історію для кожної станції. Next.js надає останній вимір через HTTP API.
 
 Той самий воркер щохвилини збирає графіки відключень усіх черг ДТЕК Київської області з alerts.energy. Дашборд показує останні показники станції, поточні графіки та історію їхніх змін.
+
+## Локальний запуск із VS Code
+
+1. Встанови Node.js 24 і запусти `npm ci`. У `.env` заповни `PG*` за зразком у `.env.example`, дані станції та облікові дані дашборда. Для локального HTTP встанови `DASHBOARD_SECURE_COOKIE=false`.
+2. Запусти PostgreSQL окремо:
+
+   ```sh
+   docker compose -f compose.db.yaml up -d --wait
+   ```
+
+   `compose.db.yaml` запускає лише PostgreSQL. Він доступний на `127.0.0.1` і використовує окремий том для локальної розробки. Якщо PostgreSQL уже працює локально, можна вказати його параметри в `PG*`.
+
+3. У **Run and Debug** вибери **Power Dashboard** і натисни **F5**. VS Code застосує міграції, зареєструє станцію та запустить вебзастосунок і воркер. Відкрий адресу з термінала Next.js, типово `http://localhost:3000`.
+
+Воркер сам визначає ОС. За потреби явно задай `BLE_HOST_OS=macos` або `BLE_HOST_OS=linux` відповідно до хоста. На Mac дозволь Bluetooth у **System Settings → Privacy & Security → Bluetooth**, якщо система запитає дозвіл. Воркер шукає Venus E 3.0 у радіусі дії та звіряє `STATION_DEVICE_ID` перед збереженням вимірів.
 
 ## Запуск на Ubuntu Server
 
@@ -41,7 +56,7 @@
    docker compose logs -f worker
    ```
 
-   Для запуску на Mac або перевірки без BLE виконай `docker compose up -d --build api` і відкрий `http://127.0.0.1:3000`. Системний сокет BlueZ монтується лише у воркер. У разі відмови D-Bus перевір доступ користувача контейнера до шини й політику BlueZ хоста. Після заміни системного сокета D-Bus на хості перествори контейнер воркера.
+   Для перевірки без BLE виконай `docker compose up -d --build api` і відкрий `http://127.0.0.1:3000`. Системний сокет BlueZ монтується лише у воркер. У разі відмови D-Bus перевір доступ користувача контейнера до шини й політику BlueZ хоста. Після заміни системного сокета D-Bus на хості перествори контейнер воркера.
 
 ## Дашборд
 
