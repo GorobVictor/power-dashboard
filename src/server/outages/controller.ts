@@ -1,10 +1,6 @@
 import { authorizeApiRequest, json } from "../api.ts";
-import { database } from "../db.ts";
-import { findCurrentSchedules, findScheduleHistory } from "./repository.ts";
-import { area, isQueue, isScheduleDate, kyivDate, operator, timeZone } from "./schedules.ts";
-
-const source = { area, operator, timeZone };
-const staleAfterMs = 180_000;
+import { isQueue, isScheduleDate } from "./schedules.ts";
+import { getCurrentOutages, getOutageHistory, outageSource } from "./service.ts";
 
 function queueFilter(params: URLSearchParams) {
   const queue = params.get("queue");
@@ -12,10 +8,7 @@ function queueFilter(params: URLSearchParams) {
   return queue;
 }
 
-const readCurrent = (from: string, queue: string | null) => findCurrentSchedules(database(), from, queue);
-const readHistory = (date: string, queue: string | null) => findScheduleHistory(database(), date, queue);
-
-export async function currentOutages(request: Request, read = readCurrent, now = new Date()) {
+export async function currentOutages(request: Request, read?: Parameters<typeof getCurrentOutages>[2], now = new Date()) {
   const unauthorized = authorizeApiRequest(request);
   if (unauthorized) return unauthorized;
   const params = new URL(request.url).searchParams;
@@ -25,20 +18,14 @@ export async function currentOutages(request: Request, read = readCurrent, now =
   }
 
   try {
-    const current = await read(kyivDate(now), queue);
-    const lastPoll = current.lastSuccessfulPollAt;
-    return json({
-      ...source,
-      ...current,
-      stale: lastPoll ? now.getTime() - lastPoll.getTime() >= staleAfterMs : null,
-    }, 200);
+    return json(await getCurrentOutages(queue, now, read), 200);
   } catch (error) {
     console.error("Unable to read current outage schedules", (error as Error).name);
     return json({ error: "service_unavailable" }, 503);
   }
 }
 
-export async function outageHistory(request: Request, read = readHistory) {
+export async function outageHistory(request: Request, read = getOutageHistory) {
   const unauthorized = authorizeApiRequest(request);
   if (unauthorized) return unauthorized;
   const params = new URL(request.url).searchParams;
@@ -51,7 +38,7 @@ export async function outageHistory(request: Request, read = readHistory) {
 
   try {
     const versions = await read(date, queue);
-    return json({ ...source, date, versions }, 200);
+    return json({ ...outageSource, date, versions }, 200);
   } catch (error) {
     console.error("Unable to read outage schedule history", (error as Error).name);
     return json({ error: "service_unavailable" }, 503);

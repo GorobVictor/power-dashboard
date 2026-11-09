@@ -1,24 +1,106 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --background: #f4f6f8;
+  --foreground: #19232d;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --muted: #eaf0f3;
+  --muted-foreground: #516170;
+  --primary: #125b48;
+  --primary-foreground: #ffffff;
+  --accent: #e9f2ef;
+  --accent-foreground: #124c3d;
+  --border: #dce3e9;
+  --input: #a2b0bc;
+  --ring: #277d63;
+  --success: #145c45;
+  --success-surface: #dff4e9;
+  --warning: #78450e;
+  --warning-surface: #fff0d6;
+  --danger: #a4272e;
+  --danger-surface: #fce9e8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+    --background: #11171f;
+    --foreground: #e8eff5;
+    --card: #1a222d;
+    --muted: #24303d;
+    --muted-foreground: #aebdca;
+    --primary: #8cd6b9;
+    --primary-foreground: #132d25;
+    --accent: #253b36;
+    --accent-foreground: #bbebd7;
+    --border: #334353;
+    --input: #64788b;
+    --ring: #8cd6b9;
+    --success: #a1e3c5;
+    --success-surface: #203f36;
+    --warning: #ffcf89;
+    --warning-surface: #45341d;
+    --danger: #ffb8b6;
+    --danger-surface: #4e2a30;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, sans-serif;
+  }
+}
+
+.charge-progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  appearance: none;
+  border-radius: 9999px;
+  background-color: var(--card);
+}
+
+.charge-progress::-webkit-progress-bar {
+  background-color: var(--card);
+}
+
+.charge-progress::-webkit-progress-value {
+  border-radius: 9999px;
+  background-color: var(--success);
+}
+
+.charge-progress::-moz-progress-bar {
+  border-radius: 9999px;
+  background-color: var(--success);
 }

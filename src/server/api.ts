@@ -1,24 +1,17 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { getCredentials, matchesCredentials } from "./credentials.ts";
 
-function sameSecret(actual: string, expected: string) {
-  const digest = (value: string) => createHash("sha256").update(value).digest();
-  return timingSafeEqual(digest(actual), digest(expected));
-}
-
-function isAuthorized(header: string | null, username: string, password: string) {
+function isAuthorized(header: string | null, credentials: NonNullable<ReturnType<typeof getCredentials>>) {
   const encoded = /^Basic +([A-Za-z0-9+/]+={0,2})$/i.exec(header ?? "")?.[1];
   if (!encoded) return false;
 
   const decoded = Buffer.from(encoded, "base64");
   if (decoded.toString("base64") !== encoded) return false;
-  const credentials = decoded.toString("utf8");
-  if (!Buffer.from(credentials, "utf8").equals(decoded)) return false;
+  const value = decoded.toString("utf8");
+  if (!Buffer.from(value, "utf8").equals(decoded)) return false;
 
-  const separator = credentials.indexOf(":");
+  const separator = value.indexOf(":");
   if (separator < 1) return false;
-  const validUsername = sameSecret(credentials.slice(0, separator), username);
-  const validPassword = sameSecret(credentials.slice(separator + 1), password);
-  return validUsername && validPassword;
+  return matchesCredentials(value.slice(0, separator), value.slice(separator + 1), credentials);
 }
 
 export function json(body: unknown, status: number, headers?: Record<string, string>) {
@@ -30,12 +23,12 @@ export function json(body: unknown, status: number, headers?: Record<string, str
 
 export function authorizeApiRequest(request: Request): Response | null {
   const authorization = request.headers.get("Authorization");
-  const { API_USERNAME: username, API_PASSWORD: password } = process.env;
-  if (!username || username.includes(":") || !password) {
+  const credentials = getCredentials();
+  if (!credentials) {
     console.error("Invalid Basic Auth configuration");
     return json({ error: "service_unavailable" }, 503);
   }
-  if (!isAuthorized(authorization, username, password)) {
+  if (!isAuthorized(authorization, credentials)) {
     return json({ error: "unauthorized" }, 401, {
       "WWW-Authenticate": 'Basic realm="Power Dashboard", charset="UTF-8"',
     });

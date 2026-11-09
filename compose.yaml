@@ -50,6 +50,9 @@ services:
       <<: *database-env
       API_USERNAME: ${API_USERNAME:?Set API_USERNAME in .env}
       API_PASSWORD: ${API_PASSWORD:?Set API_PASSWORD in .env}
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-}
+      DASHBOARD_SECURE_COOKIE: ${DASHBOARD_SECURE_COOKIE:-true}
+      STATION_ID: ${STATION_ID:-}
       STALE_AFTER_MS: ${STALE_AFTER_MS:-5000}
     depends_on:
       bootstrap:
