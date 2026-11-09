@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Power Dashboard: bootstrap",
+      "type": "npm",
+      "script": "bootstrap",
+      "problemMatcher": []
+    }
+  ]
+}

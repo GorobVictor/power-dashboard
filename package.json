@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "bootstrap": "node src/server/bootstrap.ts",
-    "worker": "node src/server/worker.ts",
+    "bootstrap": "node --env-file-if-exists=.env src/server/bootstrap.ts",
+    "worker": "node --env-file-if-exists=.env src/server/worker.ts",
     "test": "node --test tests/*.test.ts"
   },
   "dependencies": {
@@ -36,5 +36,8 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@stoprocent/noble": "^2.8.0"
   }
 }

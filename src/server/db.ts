@@ -22,3 +22,10 @@ export function database(): Pool {
 export function databaseClient(): Client {
   return new Client(connectionOptions);
 }
+
+export function databaseErrorMessage(error: unknown): string {
+  if (error instanceof AggregateError && error.errors.length) {
+    return error.errors.map(databaseErrorMessage).join(", ");
+  }
+  return error instanceof Error ? error.message || error.name : String(error);
+}

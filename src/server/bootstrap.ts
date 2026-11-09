@@ -1,6 +1,6 @@
 import { runner } from "node-pg-migrate";
 import { stationFromEnvironment } from "./config.ts";
-import { databaseClient } from "./db.ts";
+import { databaseClient, databaseErrorMessage } from "./db.ts";
 import { registerStation } from "./stations/repository.ts";
 
 async function bootstrap() {
@@ -23,7 +23,7 @@ async function bootstrap() {
   }
 }
 
-bootstrap().catch((error: Error) => {
-  console.error("Database bootstrap failed", error.message);
+bootstrap().catch((error: unknown) => {
+  console.error("Database bootstrap failed", databaseErrorMessage(error));
   process.exitCode = 1;
 });

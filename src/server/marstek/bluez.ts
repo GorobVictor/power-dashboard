@@ -1,6 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import dbus, { type Message, type MessageBus, type MessageLike, type Variant } from "dbus-next";
 import { abortable } from "./abort.ts";
+import { requestFrame, type ConnectStation } from "./client.ts";
+import { DEVICE_INFO, verifyDevice } from "./protocol.ts";
 
 const BLUEZ = "org.bluez";
 const ADAPTER = "org.bluez.Adapter1";
@@ -173,4 +175,19 @@ export class BluezConnection {
     }
     this.bus.disconnect();
   }
+}
+
+export function bluezConnector(adapter: string): ConnectStation {
+  if (!/^hci\d+$/.test(adapter)) throw new Error("BLE_ADAPTER must be an adapter name such as hci0");
+  return async (station, signal) => {
+    const connection = new BluezConnection();
+    try {
+      await connection.open(adapter, station.bleMac, signal);
+      verifyDevice(await requestFrame(connection, DEVICE_INFO, signal), station);
+      return connection;
+    } catch (error) {
+      await connection.close();
+      throw error;
+    }
+  };
 }

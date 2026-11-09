@@ -1,11 +1,18 @@
 import { abortable } from "./abort.ts";
 import { DEVICE_INFO, FrameDecoder, readCommand, STATE } from "./protocol.ts";
+import type { CollectorStation } from "../stations/types.ts";
 
 interface ByteConnection {
   signal: AbortSignal;
   onBytes(receive: (bytes: Buffer) => void): () => void;
   write(bytes: Buffer, signal: AbortSignal): Promise<void>;
 }
+
+export interface BleConnection extends ByteConnection {
+  close(): Promise<void>;
+}
+
+export type ConnectStation = (station: CollectorStation, signal: AbortSignal) => Promise<BleConnection>;
 
 export async function requestFrame(
   connection: ByteConnection,

@@ -1,8 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient } from "../db.ts";
-import { BluezConnection } from "../marstek/bluez.ts";
-import { requestFrame } from "../marstek/client.ts";
-import { decodeState, DEVICE_INFO, STATE, verifyDevice } from "../marstek/protocol.ts";
+import { requestFrame, type ConnectStation } from "../marstek/client.ts";
+import { decodeState, STATE } from "../marstek/protocol.ts";
 import { lockStation, saveMeasurement } from "./repository.ts";
 import type { CollectorStation } from "./types.ts";
 
@@ -11,7 +10,7 @@ const MAX_BACKOFF_MS = 60_000;
 
 async function collectWithLock(
   station: CollectorStation,
-  adapter: string,
+  connect: ConnectStation,
   interval: number,
   shutdown: AbortSignal,
   onSuccess: () => void,
@@ -28,10 +27,8 @@ async function collectWithLock(
     if (!await lockStation(db, station.id)) return;
     signal.throwIfAborted();
 
-    const connection = new BluezConnection();
+    const connection = await connect(station, signal);
     try {
-      await connection.open(adapter, station.bleMac, signal);
-      verifyDevice(await requestFrame(connection, DEVICE_INFO, signal), station);
       console.info("Connected to station", station.id);
 
       const session = AbortSignal.any([signal, connection.signal]);
@@ -58,14 +55,14 @@ async function collectWithLock(
 
 export async function collectStation(
   station: CollectorStation,
-  adapter: string,
+  connect: ConnectStation,
   interval: number,
   signal: AbortSignal,
 ) {
   let backoff = INITIAL_BACKOFF_MS;
   while (!signal.aborted) {
     try {
-      await collectWithLock(station, adapter, interval, signal, () => {
+      await collectWithLock(station, connect, interval, signal, () => {
         backoff = INITIAL_BACKOFF_MS;
       });
     } catch (error) {

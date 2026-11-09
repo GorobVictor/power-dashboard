@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { positiveInteger } from "./config.ts";
-import { databaseClient } from "./db.ts";
+import { databaseClient, databaseErrorMessage } from "./db.ts";
 import { collectOutageSchedules } from "./outages/collector.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
@@ -17,14 +17,24 @@ async function enabledStations() {
 
 async function runMarstek(signal: AbortSignal) {
   const interval = positiveInteger("POLL_INTERVAL_MS", 1_000);
-  const adapter = process.env.BLE_ADAPTER ?? "hci0";
-  if (!/^hci\d+$/.test(adapter)) throw new Error("BLE_ADAPTER must be an adapter name such as hci0");
-
+  const platform = process.platform === "darwin" ? "macos" : process.platform;
+  const host = process.env.BLE_HOST_OS || platform;
+  if (host !== platform || (host !== "macos" && host !== "linux")) {
+    throw new Error("BLE_HOST_OS must match the worker host: macos or linux");
+  }
   while (!signal.aborted) {
     const stations = await enabledStations();
+    signal.throwIfAborted();
     if (stations.length) {
-      console.info("Starting Marstek worker", { adapter, interval, stations: stations.length });
-      await Promise.all(stations.map((station) => collectStation(station, adapter, interval, signal)));
+      const macos = host === "macos" ? await import("./marstek/macos.ts") : null;
+      const connect = macos?.connectMacos
+        ?? (await import("./marstek/bluez.ts")).bluezConnector(process.env.BLE_ADAPTER || "hci0");
+      try {
+        console.info("Starting Marstek worker", { host, interval, stations: stations.length });
+        await Promise.all(stations.map((station) => collectStation(station, connect, interval, signal)));
+      } finally {
+        macos?.stopMacos();
+      }
       return;
     }
     console.info("No enabled Marstek stations. Checking again in 30 seconds");
@@ -41,7 +51,7 @@ try {
   await Promise.all(collectors);
 } catch (error) {
   if (!shutdown.signal.aborted) {
-    console.error("Worker failed", (error as Error).message);
+    console.error("Worker failed", databaseErrorMessage(error));
     shutdown.abort();
     process.exitCode = 1;
   }

@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { databaseClient } from "../db.ts";
+import { databaseClient, databaseErrorMessage } from "../db.ts";
 import { AlertsHttpError, fetchSchedules } from "./client.ts";
 import { lockOutageSource, saveOutagePoll } from "./repository.ts";
 import { AlertsSourceError } from "./schedules.ts";
@@ -43,7 +43,7 @@ export async function collectOutageSchedules(shutdown: AbortSignal) {
         }
       }
     } catch (error) {
-      if (!shutdown.aborted) console.warn("alerts.energy collector interrupted", (error as Error).name);
+      if (!shutdown.aborted) console.warn("alerts.energy collector interrupted", databaseErrorMessage(error));
     } finally {
       await db.end();
     }
