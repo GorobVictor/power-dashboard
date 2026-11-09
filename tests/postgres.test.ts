@@ -4,11 +4,13 @@ import test from "node:test";
 import { runner } from "node-pg-migrate";
 import { Client } from "pg";
 import { decodeState } from "../src/server/marstek/protocol.ts";
+import { findCurrentSchedules, findScheduleHistory, lockOutageSource, saveOutagePoll } from "../src/server/outages/repository.ts";
+import type { Schedule } from "../src/server/outages/schedules.ts";
 import { findLatest, lockStation, registerStation, saveMeasurement } from "../src/server/stations/repository.ts";
 
 const connectionString = process.env.TEST_DATABASE_URL;
 
-test("PostgreSQL migrations, station isolation, and session locks", { skip: !connectionString }, async () => {
+test("PostgreSQL migrations, station isolation, and outage history", { skip: !connectionString }, async (t) => {
   const schema = `power_test_${randomBytes(8).toString("hex")}`;
   const db = new Client({ connectionString });
   const other = new Client({ connectionString });
@@ -19,7 +21,7 @@ test("PostgreSQL migrations, station isolation, and session locks", { skip: !con
       dbClient: db, dir: "migrations", direction: "up",
       schema, createSchema: true, migrationsTable: "pgmigrations",
     });
-    assert.equal((await migrate()).length, 1);
+    assert.equal((await migrate()).length, 2);
     const first = {
       id: "793319323732595650000001", name: "First", model: "VNSE3-0",
       deviceId: "first-device", bleMac: "02:00:00:00:00:01",
@@ -46,6 +48,51 @@ test("PostgreSQL migrations, station isolation, and session locks", { skip: !con
     await assert.rejects(registerStation(db, { ...first, deviceId: "different" }), /different device/);
     assert.deepEqual((await findLatest(db, first.id))?.measurement, latest);
     assert.deepEqual((await findLatest(db, second.id))?.measurement, otherLatest);
+
+    await t.test("records outage transitions atomically and keeps only the last poll current", async () => {
+      const date = "2026-11-11";
+      const tomorrow = "2026-11-12";
+      const firstSchedule: Schedule = {
+        queue: "4.1", date,
+        content: { status: "NoShutdowns", hours: Array(24).fill(0), possible: [], publishedSchedule: null },
+      };
+      const changed: Schedule = {
+        ...firstSchedule,
+        content: { ...firstSchedule.content, status: "ScheduleApplies", hours: Array(24).fill(1) },
+      };
+      const nextDay = { ...firstSchedule, date: tomorrow };
+      const otherQueue = { ...firstSchedule, queue: "5.2" };
+      const at = (minute: number) => new Date(Date.UTC(2026, 10, 11, 0, minute));
+
+      assert.deepEqual(await findCurrentSchedules(db, date, null), { schedules: [], lastSuccessfulPollAt: null });
+      assert.equal(await lockOutageSource(db), true);
+      assert.equal(await lockOutageSource(other), false);
+
+      await saveOutagePoll(db, [firstSchedule, otherQueue, nextDay], at(0));
+      await saveOutagePoll(db, [firstSchedule, otherQueue, nextDay], at(1));
+      await saveOutagePoll(db, [changed, otherQueue, nextDay], at(2));
+      await saveOutagePoll(db, [firstSchedule, nextDay], at(3));
+      const history = await findScheduleHistory(db, date, firstSchedule.queue);
+      assert.deepEqual(history.map(({ status }) => status), ["NoShutdowns", "ScheduleApplies", "NoShutdowns"]);
+      assert.deepEqual(history.map(({ observedAt }) => observedAt), [at(0), at(2), at(3)]);
+      assert.equal((await findScheduleHistory(db, date, otherQueue.queue)).length, 1);
+      assert.equal((await findScheduleHistory(db, tomorrow, firstSchedule.queue)).length, 1);
+      assert.deepEqual(await findCurrentSchedules(db, date, otherQueue.queue), { schedules: [], lastSuccessfulPollAt: at(3) });
+      assert.deepEqual((await findCurrentSchedules(db, tomorrow, null)).schedules.map(({ date }) => date), [tomorrow]);
+
+      await assert.rejects(saveOutagePoll(db, [changed, { ...nextDay, date: "invalid" }], at(4)));
+      assert.equal((await findCurrentSchedules(db, date, null)).lastSuccessfulPollAt?.getTime(), at(3).getTime());
+      assert.equal((await findScheduleHistory(db, date, firstSchedule.queue)).length, 3);
+
+      await saveOutagePoll(db, [], at(5));
+      assert.deepEqual(await findCurrentSchedules(db, date, null), { schedules: [], lastSuccessfulPollAt: at(5) });
+      await db.query("SELECT pg_advisory_unlock_all()");
+      assert.equal(await lockOutageSource(other), true);
+      await other.query(`SET search_path TO "${schema}"`);
+      await saveOutagePoll(other, [firstSchedule], at(6));
+      assert.equal((await findScheduleHistory(db, date, firstSchedule.queue)).length, 3);
+      assert.equal((await findCurrentSchedules(db, date, null)).lastSuccessfulPollAt?.getTime(), at(6).getTime());
+    });
 
     const lockId = `${schema}:station`;
     assert.equal(await lockStation(other, lockId), true);

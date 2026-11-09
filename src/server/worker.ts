@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { positiveInteger } from "./config.ts";
 import { databaseClient } from "./db.ts";
+import { collectOutageSchedules } from "./outages/collector.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
 
@@ -14,7 +15,7 @@ async function enabledStations() {
   }
 }
 
-async function run(signal: AbortSignal) {
+async function runMarstek(signal: AbortSignal) {
   const interval = positiveInteger("POLL_INTERVAL_MS", 1_000);
   const adapter = process.env.BLE_ADAPTER ?? "hci0";
   if (!/^hci\d+$/.test(adapter)) throw new Error("BLE_ADAPTER must be an adapter name such as hci0");
@@ -35,9 +36,14 @@ const shutdown = new AbortController();
 process.once("SIGINT", () => shutdown.abort());
 process.once("SIGTERM", () => shutdown.abort());
 
-run(shutdown.signal).catch((error: Error) => {
-  if (shutdown.signal.aborted) return;
-  console.error("Marstek worker failed", error.message);
-  shutdown.abort();
-  process.exitCode = 1;
-});
+const collectors = [runMarstek(shutdown.signal), collectOutageSchedules(shutdown.signal)];
+try {
+  await Promise.all(collectors);
+} catch (error) {
+  if (!shutdown.signal.aborted) {
+    console.error("Worker failed", (error as Error).message);
+    shutdown.abort();
+    process.exitCode = 1;
+  }
+  await Promise.allSettled(collectors);
+}
