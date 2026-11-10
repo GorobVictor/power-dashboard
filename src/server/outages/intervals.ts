@@ -1,4 +1,4 @@
-import type { ScheduleContent } from "../../server/outages/schedules.ts";
+import type { ScheduleContent } from "./schedules.ts";
 
 const queueOrder = new Intl.Collator("uk-UA", { numeric: true });
 

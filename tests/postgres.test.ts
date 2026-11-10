@@ -229,22 +229,33 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       const shifted: Schedule = {
         ...shorter, content: { ...shorter.content, hours: [3, ...Array(23).fill(0)] },
       };
+      const possibleChanged: Schedule = {
+        ...shifted, content: { ...shifted.content, possible: [...Array(23).fill(0), 3] },
+      };
       const emergency: Schedule = {
-        ...shifted, content: { ...shifted.content, status: "EmergencyShutdowns", hours: Array(24).fill(9) },
+        ...possibleChanged, content: { ...possibleChanged.content, status: "EmergencyShutdowns", hours: Array(24).fill(9) },
       };
       await saveOutagePollWithTelegram(db, [shorter, otherChanged], at(5), waiting.queue);
       await saveOutagePollWithTelegram(db, [shifted, otherChanged], at(6), waiting.queue);
-      await saveOutagePollWithTelegram(db, [emergency, otherChanged], at(7), waiting.queue);
+      await saveOutagePollWithTelegram(db, [possibleChanged, otherChanged], at(7), waiting.queue);
+      await saveOutagePollWithTelegram(db, [emergency, otherChanged], at(8), waiting.queue);
       const messages = await telegramMessages();
-      assert.equal(messages.length, 5);
+      assert.equal(messages.length, 6);
       assert.equal(messages[0], [
         "📅 *З’явився графік ДТЕК*", "Черга *4\\.1* · 13\\.11\\.2026 · Київська область", "",
         "💡 Зі світлом за графіком: *22 год*", "🌑 Без світла за графіком: *2 год*",
       ].join("\n"));
       assert.match(messages[1], /Оновився графік ДТЕК[\s\S]*24 год[\s\S]*Світла на \*2 год більше\*/);
+      assert.match(messages[1], /Зміни планових відключень\*\nБуло: 00:00–01:30, 02:30–03:00\nСтало: —/);
       assert.match(messages[2], /23 год 30 хв[\s\S]*Світла на \*30 хв менше\*/);
+      assert.match(messages[2], /Зміни планових відключень\*\nБуло: —\nСтало: 00:00–00:30/);
       assert.match(messages[3], /Загальний час зі світлом не змінився/);
-      assert.match(messages[4], /Тривалість відключень за добу поки невідома[\s\S]*Порівняння з попереднім графіком недоступне/);
+      assert.match(messages[3], /Зміни планових відключень\*\nБуло: 00:00–00:30\nСтало: 00:30–01:00/);
+      assert.doesNotMatch(messages[3], /Зміни можливих відключень/);
+      assert.match(messages[4], /Зміни можливих відключень\*\nБуло: 03:00–04:00\nСтало: 23:30–24:00/);
+      assert.doesNotMatch(messages[4], /Зміни планових відключень/);
+      assert.match(messages[5], /аварійні обмеження[\s\S]*Тривалість відключень за добу поки невідома[\s\S]*Порівняння з попереднім графіком недоступне/);
+      assert.doesNotMatch(messages[5], /Зміни планових відключень/);
       assert.equal((await findScheduleHistory(db, waiting.date, otherQueue.queue)).length, 2);
       await db.query("DELETE FROM telegram_outbox");
     });

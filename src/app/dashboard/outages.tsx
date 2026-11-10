@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, inputClassName } from "@/components/ui/input";
 import type { DashboardSchedule } from "@/lib/dashboard-feed";
 import { cn } from "@/lib/utils";
+import { clockTime, outageIntervals, outageQueues } from "@/server/outages/intervals";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
-import { clockTime, outageIntervals, outageQueues } from "./outage-intervals";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, weekday: "long", day: "numeric", month: "long" });

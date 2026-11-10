@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { inTransaction } from "../db.ts";
+import { clockTime, outageIntervals } from "../outages/intervals.ts";
 import { findCurrentSchedules, saveOutagePoll } from "../outages/repository.ts";
 import { kyivDate, timeZone, type Schedule, type ScheduleContent } from "../outages/schedules.ts";
 import { getCurrentOutages } from "../outages/service.ts";
@@ -44,12 +45,25 @@ function isPublished(content: ScheduleContent | null) {
     content.hours.length > 0 || content.possible.length > 0 || content.publishedSchedule !== null);
 }
 
-function outageMinutes(content: ScheduleContent | null) {
+function plannedOutages(content: ScheduleContent | null) {
   if (!content || content.hours.includes(9)) return null;
-  if (content.status === "NoShutdowns") return 0;
+  if (content.status === "NoShutdowns") return { intervals: [], minutes: 0 };
   if (content.status !== "ScheduleApplies" || content.hours.length !== 24) return null;
-  return content.hours.reduce<number>((total, code) => total + 30 *
-    (Number(coversTime(code, 0)) + Number(coversTime(code, 30))), 0);
+  const intervals = outageIntervals(content.hours);
+  return { intervals, minutes: intervals.reduce((total, { start, end }) => total + end - start, 0) };
+}
+
+function intervalChanges(
+  label: string, previous: ReturnType<typeof outageIntervals>, current: ReturnType<typeof outageIntervals>,
+) {
+  const labels = (intervals: ReturnType<typeof outageIntervals>) => intervals.map(({ start, end, kind }) =>
+    `${clockTime(start)}–${clockTime(end)}${kind === "emergency" ? " · аварійні" : ""}`);
+  const before = labels(previous);
+  const after = labels(current);
+  const removed = before.filter((interval) => !after.includes(interval));
+  const added = after.filter((interval) => !before.includes(interval));
+  if (!removed.length && !added.length) return [];
+  return ["", `*${label}*`, `Було: ${removed.join(", ") || "—"}`, `Стало: ${added.join(", ") || "—"}`];
 }
 
 function formatDuration(minutes: number) {
@@ -67,22 +81,28 @@ function scheduleMessage(
   const dateLabel = escapeMarkdown(date.split("-").reverse().join("."));
   const lines = [`📅 *${event}*`, `Черга *${escapeMarkdown(queue)}* · ${dateLabel} · Київська область`, ""];
 
-  const minutesOff = outageMinutes(content);
-  if (minutesOff === null) {
+  const plan = plannedOutages(content);
+  if (!plan) {
+    if (content.status === "EmergencyShutdowns") lines.push("⚠️ ДТЕК повідомляє про аварійні обмеження");
+    if (content.status === "WaitingForSchedule") lines.push("Очікуємо на публікацію графіка ДТЕК");
     lines.push("Тривалість відключень за добу поки невідома");
   } else {
     lines.push(
-      `💡 Зі світлом за графіком: *${formatDuration(MINUTES_PER_DAY - minutesOff)}*`,
-      `🌑 Без світла за графіком: *${formatDuration(minutesOff)}*`,
+      `💡 Зі світлом за графіком: *${formatDuration(MINUTES_PER_DAY - plan.minutes)}*`,
+      `🌑 Без світла за графіком: *${formatDuration(plan.minutes)}*`,
     );
   }
 
-  if (wasPublished) {
-    const previousMinutesOff = outageMinutes(previousContent);
-    if (minutesOff === null || previousMinutesOff === null) {
+  if (wasPublished && previousContent) {
+    const previousPlan = plannedOutages(previousContent);
+    if (!plan || !previousPlan) {
       lines.push("", "Порівняння з попереднім графіком недоступне");
     } else {
-      const difference = previousMinutesOff - minutesOff;
+      lines.push(
+        ...intervalChanges("Зміни планових відключень", previousPlan.intervals, plan.intervals),
+        ...intervalChanges("Зміни можливих відключень", outageIntervals(previousContent.possible), outageIntervals(content.possible)),
+      );
+      const difference = previousPlan.minutes - plan.minutes;
       if (difference === 0) {
         lines.push("", "↔️ Загальний час зі світлом не змінився");
       } else {

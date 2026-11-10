@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
-import { clockTime, outageIntervals } from "../src/app/dashboard/outage-intervals.ts";
+import { clockTime, outageIntervals } from "../src/server/outages/intervals.ts";
 import { addTelemetrySample, shiftTelemetryDate, telemetryWindow } from "../src/lib/telemetry-history.ts";
 import {
   createDashboardSession,
