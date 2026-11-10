@@ -2,10 +2,12 @@
 
 import { Activity } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { shiftTelemetryDate, telemetryPeriods, type TelemetryHistory, type TelemetrySample, type TelemetrySelection } from "@/lib/telemetry-history";
 import { cn } from "@/lib/utils";
-import { defaultTelemetryPeriod, telemetryPeriods, type TelemetryHistory, type TelemetryPeriod, type TelemetrySample } from "@/lib/telemetry-history";
-import { timeZone } from "@/server/outages/schedules";
+import { isScheduleDate, timeZone } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
 import { mobilePanelClassName, Timestamp } from "./panel";
 
@@ -19,8 +21,14 @@ const power: Series[] = [
 ];
 const timeFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, hour: "2-digit", minute: "2-digit" });
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, day: "2-digit", month: "2-digit" });
+const fullDateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, dateStyle: "short" });
 const number = new Intl.NumberFormat("uk-UA");
-const tickFractions = [0, 0.25, 0.5, 0.75, 1];
+const presets = [
+  { period: "today", label: "Сьогодні" },
+  { period: "yesterday", label: "Вчора" },
+  ...(["1h", "6h", "7d"] as const).map((period) => ({ period, label: telemetryPeriods[period].label })),
+] as const;
+type PeriodFilter = { period: "today" } | { period: "yesterday" } | TelemetrySelection;
 
 function powerTicks(samples: TelemetrySample[]) {
   const values = samples.flatMap((sample) => power.map(({ key }) => sample[key] ?? 0));
@@ -51,15 +59,17 @@ function chartPath(
   return path;
 }
 
-function HistoryChart({ title, unit, history, period, series }: {
-  title: string; unit: string; history: TelemetryHistory; period: TelemetryPeriod; series: Series[];
+function HistoryChart({ title, unit, history, calendar, series }: {
+  title: string; unit: string; history: TelemetryHistory; calendar: boolean; series: Series[];
 }) {
   const label = useId();
   const instructions = useId();
   const [selection, setSelection] = useState<number>();
-  const { duration, bucket } = telemetryPeriods[period];
-  const { end, samples } = history;
-  const start = end - duration;
+  const { start, end, bucket, samples } = history;
+  const duration = end - start;
+  const days = Math.round(duration / 86_400_000);
+  const tickFractions = days === 2 ? [0, 1] : days === 3 || days === 4 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  const axisFormat = days > 1 ? dateFormat : timeFormat;
   const plot = useMemo(() => {
     const ticks = unit === "%" ? [100, 75, 50, 25, 0] : powerTicks(samples);
     const top = ticks[0];
@@ -153,8 +163,9 @@ function HistoryChart({ title, unit, history, period, series }: {
             </div>
             <div aria-hidden="true" className="col-start-2 mt-1.5 flex justify-between gap-1 text-[0.625rem] text-muted-foreground tabular-nums sm:text-xs">
               {tickFractions.map((fraction, index) => (
-                <span key={fraction} className={index % 2 ? "hidden sm:inline" : undefined}>
-                  {(period === "7d" ? dateFormat : timeFormat).format(start + duration * fraction)}
+                <span key={fraction} className={tickFractions.length === 5 && index % 2 ? "hidden sm:inline" : undefined}>
+                  {calendar && days === 1 && fraction === 1 ? "24:00"
+                    : axisFormat.format(fraction === 1 && calendar ? end - 1 : start + duration * fraction)}
                 </span>
               ))}
             </div>
@@ -180,18 +191,34 @@ function HistoryChart({ title, unit, history, period, series }: {
 }
 
 export function TelemetryPanel() {
-  const [period, setPeriod] = useState<TelemetryPeriod>(defaultTelemetryPeriod);
+  const [filter, setFilter] = useState<PeriodFilter>({ period: "today" });
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [dateError, setDateError] = useState(false);
   const [chart, setChart] = useState<"charge" | "power">("charge");
-  const { station, telemetry, connection, historySupported, revision, request } = useDashboardLive();
+  const datesId = useId();
+  const { station, telemetry, connection, historySupported, revision, request, today } = useDashboardLive();
   const configured = station?.kind === "station";
+  const selection = useMemo<TelemetrySelection | null>(() => {
+    if (filter.period === "today" || filter.period === "yesterday") {
+      if (!today) return null;
+      const date = filter.period === "today" ? today : shiftTelemetryDate(today, -1);
+      return { period: "dates", from: date, to: date };
+    }
+    return filter;
+  }, [filter, today]);
 
   useEffect(() => {
-    if (configured && connection === "connected" && historySupported) request({ type: "telemetry", period });
-  }, [configured, connection, historySupported, period, request, revision]);
+    if (configured && connection === "connected" && historySupported && selection) {
+      request({ type: "telemetry", ...selection });
+    }
+  }, [configured, connection, historySupported, selection, request, revision]);
 
-  const response = telemetry?.period === period ? telemetry : undefined;
-  const pending = configured && connection === "connected" && historySupported && !response;
-  const history = pending ? telemetry?.value : response?.value;
+  const response = telemetry && telemetry.period === selection?.period &&
+    (telemetry.period !== "dates" || (selection.period === "dates" && telemetry.from === selection.from && telemetry.to === selection.to))
+    ? telemetry : undefined;
+  const history = response?.value;
+  const calendar = selection?.period === "dates";
+  const rangeLabel = filter.period === "dates" && fullDateFormat.formatRange(new Date(filter.from), new Date(filter.to));
   const message = station?.kind === "unconfigured" || station?.kind === "missing" ? "Історія з’явиться після налаштування станції."
     : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."
     : connection === "connected" && !historySupported ? "Щоб завантажити історію, перезапустіть вебсервер."
@@ -208,23 +235,62 @@ export function TelemetryPanel() {
             </span>
             Історія вимірів
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground" role="status">
-            {pending && history ? "Завантажуємо період…" : "Київський час"}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {rangeLabel && `${rangeLabel} · `}Київський час
           </p>
         </div>
-        <div role="group" aria-label="Період вимірів" className="grid w-full grid-cols-4 gap-0.5 rounded-lg border bg-background p-0.5 min-[480px]:w-auto">
-          {(Object.keys(telemetryPeriods) as TelemetryPeriod[]).map((key) => (
-            <button type="button" key={key} onClick={() => setPeriod(key)} aria-pressed={period === key}
+        <div role="group" aria-label="Період вимірів" className="grid w-full grid-cols-3 gap-0.5 rounded-lg border bg-background p-0.5 min-[480px]:w-auto min-[480px]:grid-cols-6">
+          {presets.map(({ period, label }) => (
+            <button type="button" key={period} aria-pressed={filter.period === period} onClick={() => {
+              setFilter({ period });
+              setDatesOpen(false);
+              setDateError(false);
+            }}
               className={cn(
                 "min-h-9 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
-                period === key ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                filter.period === period ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}>
-              {telemetryPeriods[key].label}
+              {label}
             </button>
           ))}
+          <button type="button" aria-expanded={datesOpen} aria-controls={datesId} onClick={() => {
+            setDatesOpen(!datesOpen);
+            setDateError(false);
+          }} className={cn(
+            "min-h-9 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
+            filter.period === "dates" || datesOpen ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}>
+            Дати
+          </button>
         </div>
       </CardHeader>
       <CardContent className="min-w-0 space-y-3">
+        {datesOpen && (
+          <form id={datesId} className="space-y-2" onChange={() => setDateError(false)} onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            const from = data.get("from");
+            const to = data.get("to");
+            if (!isScheduleDate(from) || !isScheduleDate(to) || from > to) {
+              setDateError(true);
+              return;
+            }
+            setFilter({ period: "dates", from, to });
+          }}>
+            <div className="grid grid-cols-2 items-end gap-2 min-[480px]:grid-cols-[1fr_1fr_auto]">
+              <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+                Початкова дата
+                <Input type="date" name="from" defaultValue={calendar ? selection.from : today} max={today || undefined} required />
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+                Кінцева дата
+                <Input type="date" name="to" defaultValue={calendar ? selection.to : today} max={today || undefined} required />
+              </label>
+              <Button type="submit" variant="outline" className="col-span-2 min-[480px]:col-span-1">Показати</Button>
+            </div>
+            {dateError && <p role="alert" className="text-xs text-muted-foreground">Кінцева дата має бути не раніше початкової.</p>}
+          </form>
+        )}
         {configured && (
           <div role="group" aria-label="Графік вимірів" className="grid grid-cols-2 gap-1 lg:hidden">
             {([{ key: "charge", label: "Заряд" }, { key: "power", label: "Потужність" }] as const).map(({ key, label }) => (
@@ -238,13 +304,14 @@ export function TelemetryPanel() {
             ))}
           </div>
         )}
-        {configured && history && telemetry ? (
-          <div className="dashboard-enter lg:space-y-3.5 xl:grid xl:grid-cols-2 xl:gap-3.5 xl:space-y-0" key={telemetry.period}>
+        {configured && history && response ? (
+          <div className="dashboard-enter lg:space-y-3.5 xl:grid xl:grid-cols-2 xl:gap-3.5 xl:space-y-0"
+            key={response.period === "dates" ? `${response.from}-${response.to}` : response.period}>
             <div className={chart === "charge" ? "dashboard-mobile-enter" : "hidden lg:block"}>
-              <HistoryChart title="Рівень заряду" unit="%" history={history} period={telemetry.period} series={charge} />
+              <HistoryChart title="Рівень заряду" unit="%" history={history} calendar={calendar} series={charge} />
             </div>
             <div className={cn("lg:border-t lg:pt-3.5 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-3.5", chart === "power" ? "dashboard-mobile-enter" : "hidden lg:block")}>
-              <HistoryChart title="Потужність" unit="Вт" history={history} period={telemetry.period} series={power} />
+              <HistoryChart title="Потужність" unit="Вт" history={history} calendar={calendar} series={power} />
             </div>
           </div>
         ) : (

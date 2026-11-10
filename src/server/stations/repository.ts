@@ -1,5 +1,5 @@
 import type { Client, Pool } from "pg";
-import { telemetryPeriods, type TelemetryHistory, type TelemetryPeriod } from "../../lib/telemetry-history.ts";
+import { telemetryWindow, type TelemetryDateRange, type TelemetryHistory, type TelemetryPeriod } from "../../lib/telemetry-history.ts";
 import type { CollectorStation, LatestMeasurement, Measurement, SerializedMeasurement, Station } from "./types.ts";
 
 export async function registerStation(db: Client, station: CollectorStation) {
@@ -70,9 +70,10 @@ export async function findLatest(db: Pool | Client, stationId: string): Promise<
 }
 
 export async function findTelemetryHistory(
-  db: Pool | Client, stationId: string, period: TelemetryPeriod, end = Date.now(),
+  db: Pool | Client, stationId: string, period: TelemetryPeriod | TelemetryDateRange, now = Date.now(),
 ): Promise<TelemetryHistory> {
-  const { duration, bucket } = telemetryPeriods[period];
+  const window = telemetryWindow(period, now);
+  const { start, end, bucket } = window;
   const { rows } = await db.query<Omit<TelemetryHistory["samples"][number], "time"> & { measuredAt: Date }>(
     `WITH bounds AS (SELECT $2::timestamptz AS start_at, $3::timestamptz AS end_at, $4::interval AS step)
      SELECT measured_at AS "measuredAt", soc_pct AS "socPct", battery_power_w AS "batteryPowerW",
@@ -86,10 +87,11 @@ export async function findTelemetryHistory(
        FROM measurements
        WHERE station_id = $1 AND measured_at >= GREATEST(bounds.start_at, bucket.start_at)
          AND measured_at < bucket.start_at + step AND measured_at <= end_at
+         AND (measured_at <> end_at OR $5::boolean)
        ORDER BY measured_at DESC LIMIT 1
      ) AS latest
      ORDER BY bucket.start_at`,
-    [stationId, new Date(end - duration), new Date(end), `${bucket / 1000} seconds`],
+    [stationId, new Date(start), new Date(end), `${bucket / 1000} seconds`, typeof period === "string"],
   );
-  return { end, samples: rows.map(({ measuredAt, ...metrics }) => ({ time: measuredAt.getTime(), ...metrics })) };
+  return { ...window, samples: rows.map(({ measuredAt, ...metrics }) => ({ time: measuredAt.getTime(), ...metrics })) };
 }

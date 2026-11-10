@@ -1,7 +1,7 @@
 import type { IncomingMessage, Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardRequest } from "../lib/dashboard-feed.ts";
-import { addTelemetrySample, isTelemetryPeriod, telemetrySample, type TelemetrySample } from "../lib/telemetry-history.ts";
+import { addTelemetrySample, isTelemetryPeriod, telemetrySample, telemetryWindow, type TelemetrySample } from "../lib/telemetry-history.ts";
 import { dashboardFeed } from "./dashboard-feed.ts";
 import { dashboardAuthConfig, dashboardSessionExpiration, sessionCookieName } from "./dashboard-session.ts";
 import { database } from "./db.ts";
@@ -31,8 +31,11 @@ function parseRequest(data: string): DashboardRequest | null {
   } catch {
     return null;
   }
-  if (request?.type === "telemetry" && isTelemetryPeriod(request.period)) {
-    return { type: "telemetry", period: request.period };
+  if (request?.type === "telemetry") {
+    if (isTelemetryPeriod(request.period)) return { type: "telemetry", period: request.period };
+    if (request.period === "dates" && isScheduleDate(request.from) && isScheduleDate(request.to) && request.from <= request.to) {
+      return { type: "telemetry", period: "dates", from: request.from, to: request.to };
+    }
   }
   if (request?.type === "outageHistory" && isScheduleDate(request.date) && (request.queue === null || isQueue(request.queue))) {
     return { type: "outageHistory", date: request.date, queue: request.queue };
@@ -50,11 +53,12 @@ async function loadHistory(request: DashboardRequest, client: SocketClient): Pro
   try {
     if (request.type === "telemetry") {
       const stationId = process.env.STATION_ID?.trim();
-      if (!stationId) return { ...request, value: { end: Date.now(), samples: [] } };
+      const period = request.period === "dates" ? request : request.period;
+      if (!stationId) return { ...request, value: { ...telemetryWindow(period), samples: [] } };
       const samples: TelemetrySample[] = [];
       client.telemetrySamples = samples;
       try {
-        const history = await findTelemetryHistory(database(), stationId, request.period);
+        const history = await findTelemetryHistory(database(), stationId, period);
         const value = samples.reduce((result, sample) => addTelemetrySample(result, request.period, sample), history);
         return { ...request, value };
       } finally {

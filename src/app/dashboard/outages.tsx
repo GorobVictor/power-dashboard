@@ -2,7 +2,7 @@
 
 import { CalendarClock, History } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, inputClassName } from "@/components/ui/input";
@@ -120,29 +120,56 @@ function ScheduleStatus({ status }: { status: ScheduleContent["status"] }) {
   return <StatusBadge tone={tone}>{label}</StatusBadge>;
 }
 
-function updateFilter(key: "queue" | "date", value: string) {
+function updateHistoryDate(value: string) {
   const url = new URL(window.location.href);
-  url.searchParams.set(key, value);
+  url.searchParams.set("date", value);
   if (url.href !== window.location.href) window.history.pushState(null, "", url);
 }
 
-function useOutageFilters() {
-  const params = useSearchParams();
+function readSavedQueue() {
+  try {
+    const saved = window.localStorage.getItem(queueStorageKey);
+    return saved === "all" || isQueue(saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function subscribeToSavedQueue(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+type QueueFilter = { queue: string | null; queues: string[]; selectQueue: (value: string) => void };
+
+export function useOutageQueue() {
+  const [selection, setSelection] = useState<string>();
+  const saved = useSyncExternalStore(subscribeToSavedQueue, readSavedQueue, () => null);
   const { outages, today } = useDashboardLive();
   const schedules = outages?.schedules.filter((schedule) => schedule.date >= today) ?? [];
   const queues = outageQueues(schedules);
-  const queueParam = params.get("queue");
-  const queue = queueParam === "all" ? null : isQueue(queueParam) ? queueParam : queues[0] ?? null;
+  const preferred = selection ?? saved;
+  const queue = preferred === "all" ? null : preferred ?? queues[0] ?? null;
   if (queue && !queues.includes(queue)) queues.push(queue);
-  return { queue, queueParam, queues, schedules, dateParam: params.get("date") };
+
+  function selectQueue(value: string) {
+    setSelection(value);
+    try {
+      window.localStorage.setItem(queueStorageKey, value);
+    } catch {
+      // The in-memory selection still works if browser storage is unavailable.
+    }
+  }
+
+  return { queue, queues, schedules, selectQueue };
 }
 
-function QueuePicker({ queue, queues }: { queue: string | null; queues: string[] }) {
+function QueuePicker({ queue, queues, selectQueue }: QueueFilter) {
   const id = useId();
   return (
     <div className="flex flex-wrap items-center justify-between gap-1.5">
       <label htmlFor={id} className="text-xs font-medium text-muted-foreground">Черга відключень</label>
-      <select id={id} value={queue ?? "all"} onChange={(event) => updateFilter("queue", event.target.value)}
+      <select id={id} value={queue ?? "all"} onChange={(event) => selectQueue(event.target.value)}
         className={cn(inputClassName, "h-9 w-auto min-w-28 px-2")}>
         {queues.map((value) => <option key={value} value={value}>Черга {value}</option>)}
         <option value="all">Усі черги</option>
@@ -151,29 +178,9 @@ function QueuePicker({ queue, queues }: { queue: string | null; queues: string[]
   );
 }
 
-export function OutagesPanel() {
+export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules: DashboardSchedule[] }) {
   const { outages, outagesStale, today, now, connection } = useDashboardLive();
-  const { queue, queueParam, queues, schedules } = useOutageFilters();
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("queue") !== queueParam) return;
-
-    try {
-      if (queueParam === "all" || isQueue(queueParam)) {
-        window.localStorage.setItem(queueStorageKey, queueParam);
-        return;
-      }
-
-      const saved = window.localStorage.getItem(queueStorageKey);
-      if (saved === "all" || isQueue(saved)) {
-        url.searchParams.set("queue", saved);
-        window.history.replaceState(null, "", url);
-      }
-    } catch {
-      // Queue selection still works through the URL if browser storage is unavailable.
-    }
-  }, [queueParam]);
+  const { queue } = filter;
 
   const visible = schedules.filter((schedule) => queue === null || schedule.queue === queue);
   const tomorrow = today ? new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10) : "";
@@ -197,7 +204,7 @@ export function OutagesPanel() {
           </h2>
           <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
         </div>
-        <QueuePicker queue={queue} queues={queues} />
+        <QueuePicker {...filter} />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2.5">
         {!visible.length && (
@@ -276,9 +283,10 @@ function HistoryVersions({ versions }: { versions: DashboardSchedule[] }) {
   );
 }
 
-export function OutageHistoryPanel() {
+export function OutageHistoryPanel(filter: QueueFilter) {
   const { today, connection, historySupported, schedulesRevision, outageHistory, request } = useDashboardLive();
-  const { queue, queues, dateParam } = useOutageFilters();
+  const { queue } = filter;
+  const dateParam = useSearchParams().get("date");
   const date = dateParam === null ? today : isScheduleDate(dateParam) ? dateParam : "";
   const history = outageHistory?.date === date && outageHistory.queue === queue ? outageHistory.value : undefined;
 
@@ -301,7 +309,7 @@ export function OutageHistoryPanel() {
           </span>
           Історія відключень
         </h2>
-        <QueuePicker queue={queue} queues={queues} />
+        <QueuePicker {...filter} />
       </CardHeader>
       <CardContent className="space-y-2.5">
         <form className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2" onSubmit={(event) => {
@@ -311,7 +319,7 @@ export function OutageHistoryPanel() {
           if (value === date && history === null && connection === "connected" && historySupported) {
             request({ type: "outageHistory", date, queue });
           }
-          updateFilter("date", value);
+          updateHistoryDate(value);
         }}>
           <div className="grid min-w-0 gap-1">
             <label htmlFor="history-date" className="text-xs font-medium text-muted-foreground">Дата графіка</label>

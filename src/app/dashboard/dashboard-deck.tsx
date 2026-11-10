@@ -2,10 +2,10 @@
 
 import { Activity, CalendarClock, History, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { BatteryPanel } from "./battery";
-import { OutageHistoryPanel, OutagesPanel } from "./outages";
+import { OutageHistoryPanel, OutagesPanel, useOutageQueue } from "./outages";
 import { PowerFlow } from "./power-flow";
 import { TelemetryPanel } from "./telemetry";
 
@@ -41,6 +41,14 @@ export function DashboardDeck() {
   const savedPanel = useSyncExternalStore(subscribeToSavedPanel, readSavedPanel, () => null);
   const active = selection ?? savedPanel ?? defaultPanel;
   const start = useRef<{ x: number; y: number } | null>(null);
+  const { schedules, ...outageQueue } = useOutageQueue();
+
+  useEffect(() => {
+    if (!params.has("queue")) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("queue");
+    window.history.replaceState(null, "", url);
+  }, [params]);
 
   function panelClass(panel: Panel) {
     return active === panel ? "dashboard-mobile-enter" : "max-lg:hidden";
@@ -102,11 +110,11 @@ export function DashboardDeck() {
           <TelemetryPanel />
         </section>
         <section id="outage-schedule" aria-label="Графік відключень" className={cn(panelFrame, panelClass("schedule"))}>
-          <OutagesPanel />
+          <OutagesPanel {...outageQueue} schedules={schedules} />
         </section>
         <BatteryPanel className={cn("max-lg:mx-4 max-lg:mb-4 max-lg:bg-background/50 max-lg:shadow-none sm:max-lg:mx-5", panelClass("overview"))} />
         <section id="outage-archive" aria-label="Історія відключень" className={cn(panelFrame, panelClass("archive"))}>
-          <OutageHistoryPanel />
+          <OutageHistoryPanel {...outageQueue} />
         </section>
       </div>
     </div>

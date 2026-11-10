@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
 import { clockTime, outageIntervals } from "../src/app/dashboard/outage-intervals.ts";
+import { addTelemetrySample, shiftTelemetryDate, telemetryWindow } from "../src/lib/telemetry-history.ts";
 import {
   createDashboardSession,
   dashboardAuthConfig,
@@ -54,6 +55,26 @@ test("outage intervals respect half-hour boundaries and merge only matching adja
   assert.deepEqual(outageIntervals([]), []);
   assert.equal(clockTime(90), "01:30");
   assert.equal(clockTime(1_440), "24:00");
+});
+
+test("telemetry calendar windows follow Kyiv midnight across clock changes", () => {
+  const spring = telemetryWindow({ from: "2026-03-29", to: "2026-03-29" });
+  assert.equal(spring.start, Date.parse("2026-03-28T22:00:00Z"));
+  assert.equal(spring.end, Date.parse("2026-03-29T21:00:00Z"));
+
+  const autumn = telemetryWindow({ from: "2026-10-24", to: "2026-10-25" });
+  assert.equal(autumn.start, Date.parse("2026-10-23T21:00:00Z"));
+  assert.equal(autumn.end, Date.parse("2026-10-25T22:00:00Z"));
+  assert.equal(shiftTelemetryDate("2026-01-01", -1), "2025-12-31");
+});
+
+test("live telemetry leaves fixed calendar bounds in place", () => {
+  const history = { ...telemetryWindow({ from: "2026-01-01", to: "2026-01-01" }), samples: [] };
+  const sample = { time: history.start, socPct: 0, batteryPowerW: null, gridPowerW: null, backupLoadPowerW: null };
+  const updated = addTelemetrySample(history, "dates", sample);
+  assert.deepEqual(updated, { ...history, samples: [sample] });
+  assert.equal(addTelemetrySample(updated, "dates", { ...sample, time: history.end }), updated);
+  assert.equal(addTelemetrySample(updated, "dates", { ...sample, time: history.start - 1 }), updated);
 });
 
 test("discharge estimate uses remaining energy and battery draw and preserves zero", () => {
