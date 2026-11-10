@@ -1,5 +1,5 @@
 x-database-env: &database-env
-  PGHOST: db
+  PGHOST: postgres
   PGPORT: "5432"
   PGDATABASE: power_dashboard
   PGUSER: power_dashboard
@@ -42,7 +42,7 @@ services:
       STATION_DEVICE_ID: ${STATION_DEVICE_ID:-}
       STATION_BLE_MAC: ${STATION_BLE_MAC:-}
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
 
   api:
