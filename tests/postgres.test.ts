@@ -25,7 +25,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     });
     assert.equal((await migrate(4)).length, 4);
     await db.query("INSERT INTO telegram_outbox (message) VALUES ('Legacy message.')");
-    assert.equal((await migrate()).length, 1);
+    assert.equal((await migrate(1)).length, 1);
     assert.deepEqual((await db.query("DELETE FROM telegram_outbox RETURNING message, parse_mode")).rows, [
       { message: "Legacy message.", parse_mode: null },
     ]);
@@ -39,14 +39,17 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     };
     await registerStation(db, first);
     await registerStation(db, second);
+    await db.query("INSERT INTO measurements (station_id, measured_at, work_mode) VALUES ($1, '2025-12-31T00:00:00Z', 1)", [first.id]);
+    assert.equal((await migrate()).length, 1);
+    assert.equal((await findLatest(db, first.id))?.measurement?.upsEnabled, null);
     assert.equal(await findLatest(db, "missing"), null);
     assert.equal((await findLatest(db, second.id))?.measurement, null);
 
-    const metrics = decodeState(Buffer.alloc(139));
+    const metrics = { ...decodeState(Buffer.alloc(139)), upsEnabled: null };
     const old = { ...metrics, socPct: 18, measuredAt: new Date("2026-01-01T00:00:00Z") };
-    const latest = { ...metrics, socPct: 0, measuredAt: new Date("2026-01-01T00:00:01Z") };
-    const otherLatest = { ...latest, socPct: 87, batteryPowerW: null, totalEnergyInWh: 42_949_672_950 };
-    const updates: { stationId: string; measurement: { socPct: number | null } }[] = [];
+    const latest = { ...metrics, workMode: 1, upsEnabled: true, socPct: 0, measuredAt: new Date("2026-01-01T00:00:01Z") };
+    const otherLatest = { ...latest, upsEnabled: false, socPct: 87, batteryPowerW: null, totalEnergyInWh: 42_949_672_950 };
+    const updates: { stationId: string; measurement: { socPct: number | null; upsEnabled: boolean | null } }[] = [];
     other.on("notification", ({ payload }) => {
       if (payload) updates.push(JSON.parse(payload));
     });
@@ -64,8 +67,8 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     await db.query("ROLLBACK");
     await other.query("SELECT 1");
     await other.query("UNLISTEN power_dashboard_updates");
-    assert.deepEqual(updates.map(({ stationId, measurement }) => [stationId, measurement.socPct]), [
-      [first.id, 0], [first.id, 18], [second.id, 87],
+    assert.deepEqual(updates.map(({ stationId, measurement }) => [stationId, measurement.socPct, measurement.upsEnabled]), [
+      [first.id, 0, true], [first.id, 18, null], [second.id, 87, false],
     ]);
     assert.equal((await migrate()).length, 0);
     await registerStation(db, first);
@@ -76,7 +79,8 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     await t.test("history preserves gaps, signed values and the last sample per station and bucket", async () => {
       const earlier = { ...old, measuredAt: new Date(old.measuredAt.getTime() - 45_000), socPct: null, gridPowerW: -100 };
       await saveMeasurement(db, first.id, earlier);
-      await saveMeasurement(db, first.id, { ...old, measuredAt: new Date(old.measuredAt.getTime() - 7_200_000) });
+      const midnight = { ...old, measuredAt: new Date("2025-12-31T22:00:00Z") };
+      await saveMeasurement(db, first.id, midnight);
       const end = latest.measuredAt.getTime();
       const firstHistory = await findTelemetryHistory(db, first.id, "1h", end);
       const secondHistory = await findTelemetryHistory(db, second.id, "1h", end);
@@ -86,6 +90,15 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       ]);
       assert.deepEqual(secondHistory.samples.map(({ socPct, batteryPowerW }) => [socPct, batteryPowerW]), [[87, null]]);
       assert.equal((await findTelemetryHistory(db, first.id, "1h", old.measuredAt.getTime())).samples.at(-1)?.socPct, 18);
+
+      const previousDay = { from: "2025-12-31", to: "2025-12-31" };
+      const newYear = { from: "2026-01-01", to: "2026-01-01" };
+      const previous = await findTelemetryHistory(db, first.id, previousDay);
+      const current = await findTelemetryHistory(db, first.id, newYear);
+      assert.ok(previous.samples.length > 0);
+      assert.ok(previous.samples.every(({ time }) => time < midnight.measuredAt.getTime()));
+      assert.deepEqual(current.samples.map(({ time }) => time), [midnight.measuredAt.getTime(), earlier.measuredAt.getTime(), end]);
+      assert.deepEqual((await findTelemetryHistory(db, second.id, newYear)).samples.map(({ socPct }) => socPct), [87]);
     });
 
     await t.test("records outage transitions atomically and keeps only the last poll current", async () => {
@@ -167,7 +180,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(10, -100, 98);
       await save(11, 200, 98);
       await save(12, -100, 98);
-      await save(13, 200, 95);
+      await save(13, 200, 99);
       await save(14, 200, 94);
       await save(15, 0, 94);
       await save(16, 200, 94);
@@ -177,6 +190,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
         "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *19%*",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
+        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *98%*",
         "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *98%*",
         "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *94%*",
       ]);
