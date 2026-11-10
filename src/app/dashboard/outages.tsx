@@ -22,6 +22,7 @@ const statuses = {
   EmergencyShutdowns: { label: "Аварійні обмеження", tone: "danger" },
 } as const;
 const minutesPerDay = 24 * 60;
+const queueStorageKey = "power-dashboard.outage-queue";
 type Intervals = ReturnType<typeof outageIntervals>;
 
 function ScheduleDate({ value }: { value: string }) {
@@ -133,7 +134,7 @@ function useOutageFilters() {
   const queueParam = params.get("queue");
   const queue = queueParam === "all" ? null : isQueue(queueParam) ? queueParam : queues[0] ?? null;
   if (queue && !queues.includes(queue)) queues.push(queue);
-  return { queue, queues, schedules, dateParam: params.get("date") };
+  return { queue, queueParam, queues, schedules, dateParam: params.get("date") };
 }
 
 function QueuePicker({ queue, queues }: { queue: string | null; queues: string[] }) {
@@ -152,7 +153,28 @@ function QueuePicker({ queue, queues }: { queue: string | null; queues: string[]
 
 export function OutagesPanel() {
   const { outages, outagesStale, today, now, connection } = useDashboardLive();
-  const { queue, queues, schedules } = useOutageFilters();
+  const { queue, queueParam, queues, schedules } = useOutageFilters();
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("queue") !== queueParam) return;
+
+    try {
+      if (queueParam === "all" || isQueue(queueParam)) {
+        window.localStorage.setItem(queueStorageKey, queueParam);
+        return;
+      }
+
+      const saved = window.localStorage.getItem(queueStorageKey);
+      if (saved === "all" || isQueue(saved)) {
+        url.searchParams.set("queue", saved);
+        window.history.replaceState(null, "", url);
+      }
+    } catch {
+      // Queue selection still works through the URL if browser storage is unavailable.
+    }
+  }, [queueParam]);
+
   const visible = schedules.filter((schedule) => queue === null || schedule.queue === queue);
   const tomorrow = today ? new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10) : "";
   const [hour, minute] = kyivTime.format(now).split(":").map(Number);
