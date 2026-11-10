@@ -71,6 +71,10 @@ services:
       DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
       BLE_ADAPTER: ${BLE_ADAPTER:-hci0}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-1000}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_LOW_BATTERY_PCT: ${TELEGRAM_LOW_BATTERY_PCT:-20}
+      TELEGRAM_DTEK_QUEUE: ${TELEGRAM_DTEK_QUEUE:-}
     volumes:
       - type: bind
         source: /run/dbus/system_bus_socket

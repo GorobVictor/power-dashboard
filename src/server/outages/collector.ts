@@ -1,12 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient, databaseErrorMessage } from "../db.ts";
+import { saveOutagePollWithTelegram } from "../telegram/outages.ts";
 import { AlertsHttpError, fetchSchedules } from "./client.ts";
 import { lockOutageSource, saveOutagePoll } from "./repository.ts";
 import { AlertsSourceError } from "./schedules.ts";
 
 const intervalMs = 60_000;
 
-export async function collectOutageSchedules(shutdown: AbortSignal) {
+export async function collectOutageSchedules(shutdown: AbortSignal, telegramQueue?: string) {
   let nextPoll = performance.now();
 
   while (!shutdown.aborted) {
@@ -31,7 +32,9 @@ export async function collectOutageSchedules(shutdown: AbortSignal) {
           try {
             const schedules = await fetchSchedules(signal);
             signal.throwIfAborted();
-            await saveOutagePoll(db, schedules, new Date());
+            const observedAt = new Date();
+            if (telegramQueue) await saveOutagePollWithTelegram(db, schedules, observedAt, telegramQueue);
+            else await saveOutagePoll(db, schedules, observedAt);
           } catch (error) {
             if (signal.aborted) break;
             if (error instanceof AlertsHttpError && error.retryAfterMs > 0) {

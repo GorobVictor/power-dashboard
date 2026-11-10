@@ -4,6 +4,8 @@ import type { Schedule, ScheduleVersion } from "./schedules.ts";
 
 export const outageSourceId = `alerts.energy:${area}:${operator.id}`;
 
+type ScheduleChange = Schedule & { previousContent: Schedule["content"] | null };
+
 export async function lockOutageSource(db: Client): Promise<boolean> {
   const { rows } = await db.query<{ acquired: boolean }>(
     "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
@@ -14,9 +16,9 @@ export async function lockOutageSource(db: Client): Promise<boolean> {
 
 // The collector holds the source lock. Versions and the current snapshot commit together.
 export async function saveOutagePoll(db: Client, schedules: Schedule[], observedAt: Date) {
-  await db.query(
+  const { rows } = await db.query<ScheduleChange>(
     `WITH compared AS (
-       SELECT input.*, previous.id AS previous_id,
+       SELECT input.*, previous.id AS previous_id, previous.content AS previous_content,
          input.content IS DISTINCT FROM previous.content AS changed
        FROM jsonb_to_recordset($2::jsonb) AS input(queue text, date date, content jsonb)
        LEFT JOIN LATERAL (
@@ -32,14 +34,18 @@ export async function saveOutagePoll(db: Client, schedules: Schedule[], observed
        SELECT id FROM inserted
        UNION ALL
        SELECT previous_id FROM compared WHERE NOT changed
+     ), snapshot AS (
+       INSERT INTO outage_poll_state (source, last_successful_poll_at, current_version_ids)
+       VALUES ($1, $3, ARRAY(SELECT id FROM current_versions))
+       ON CONFLICT (source) DO UPDATE SET
+         last_successful_poll_at = EXCLUDED.last_successful_poll_at,
+         current_version_ids = EXCLUDED.current_version_ids
      )
-     INSERT INTO outage_poll_state (source, last_successful_poll_at, current_version_ids)
-     VALUES ($1, $3, ARRAY(SELECT id FROM current_versions))
-     ON CONFLICT (source) DO UPDATE SET
-       last_successful_poll_at = EXCLUDED.last_successful_poll_at,
-       current_version_ids = EXCLUDED.current_version_ids`,
+     SELECT queue, to_char(date, 'YYYY-MM-DD') AS date, content, previous_content AS "previousContent"
+     FROM compared WHERE changed ORDER BY compared.date, queue`,
     [outageSourceId, JSON.stringify(schedules), observedAt],
   );
+  return rows;
 }
 
 type VersionRow = Schedule & { observedAt: Date };

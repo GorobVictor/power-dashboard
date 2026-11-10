@@ -1,9 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { positiveInteger } from "./config.ts";
+import { positiveInteger, telegramFromEnvironment } from "./config.ts";
 import { databaseClient, databaseErrorMessage } from "./db.ts";
 import { collectOutageSchedules } from "./outages/collector.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
+import type { BatteryNotificationOptions } from "./telegram/battery.ts";
+import { deliverTelegramNotifications } from "./telegram/worker.ts";
 
 async function enabledStations() {
   const db = databaseClient();
@@ -15,7 +17,7 @@ async function enabledStations() {
   }
 }
 
-async function runMarstek(signal: AbortSignal) {
+async function runMarstek(signal: AbortSignal, notifications?: BatteryNotificationOptions) {
   const interval = positiveInteger("POLL_INTERVAL_MS", 1_000);
   const platform = process.platform === "darwin" ? "macos" : process.platform;
   const host = process.env.BLE_HOST_OS || platform;
@@ -31,7 +33,7 @@ async function runMarstek(signal: AbortSignal) {
         ?? (await import("./marstek/bluez.ts")).bluezConnector(process.env.BLE_ADAPTER || "hci0");
       try {
         console.info("Starting Marstek worker", { host, interval, stations: stations.length });
-        await Promise.all(stations.map((station) => collectStation(station, connect, interval, signal)));
+        await Promise.all(stations.map((station) => collectStation(station, connect, interval, signal, notifications)));
       } finally {
         macos?.stopMacos();
       }
@@ -46,7 +48,18 @@ const shutdown = new AbortController();
 process.once("SIGINT", () => shutdown.abort());
 process.once("SIGTERM", () => shutdown.abort());
 
-const collectors = [runMarstek(shutdown.signal), collectOutageSchedules(shutdown.signal)];
+let telegram: ReturnType<typeof telegramFromEnvironment> = null;
+try {
+  telegram = telegramFromEnvironment();
+} catch (error) {
+  console.warn("Telegram notifications disabled", databaseErrorMessage(error));
+}
+
+const collectors = [
+  runMarstek(shutdown.signal, telegram ?? undefined),
+  collectOutageSchedules(shutdown.signal, telegram?.outageQueue),
+];
+if (telegram) collectors.push(deliverTelegramNotifications(telegram, shutdown.signal));
 try {
   await Promise.all(collectors);
 } catch (error) {

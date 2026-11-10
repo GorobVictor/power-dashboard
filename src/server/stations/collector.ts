@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient } from "../db.ts";
 import { requestFrame, type ConnectStation } from "../marstek/client.ts";
 import { decodeState, STATE } from "../marstek/protocol.ts";
+import { readBatteryBaseline, saveBatteryReading, type BatteryNotificationOptions } from "../telegram/battery.ts";
 import { lockStation, saveMeasurement } from "./repository.ts";
 import type { CollectorStation } from "./types.ts";
 
@@ -14,6 +15,7 @@ async function collectWithLock(
   interval: number,
   shutdown: AbortSignal,
   onSuccess: () => void,
+  notifications: BatteryNotificationOptions | undefined,
 ) {
   const db = databaseClient();
   const dbLost = new AbortController();
@@ -25,6 +27,7 @@ async function collectWithLock(
     await db.connect();
     signal.throwIfAborted();
     if (!await lockStation(db, station.id)) return;
+    let battery = notifications ? await readBatteryBaseline(db, station.id) : null;
     signal.throwIfAborted();
 
     const connection = await connect(station, signal);
@@ -37,7 +40,12 @@ async function collectWithLock(
         const payload = await requestFrame(connection, STATE, session);
         const measuredAt = new Date();
         session.throwIfAborted();
-        await saveMeasurement(db, station.id, { measuredAt, ...decodeState(payload) });
+        const measurement = { measuredAt, ...decodeState(payload) };
+        if (battery && notifications) {
+          battery = await saveBatteryReading(db, station, measurement, battery, notifications);
+        } else {
+          await saveMeasurement(db, station.id, measurement);
+        }
         onSuccess();
 
         nextAt += interval;
@@ -58,13 +66,14 @@ export async function collectStation(
   connect: ConnectStation,
   interval: number,
   signal: AbortSignal,
+  notifications?: BatteryNotificationOptions,
 ) {
   let backoff = INITIAL_BACKOFF_MS;
   while (!signal.aborted) {
     try {
       await collectWithLock(station, connect, interval, signal, () => {
         backoff = INITIAL_BACKOFF_MS;
-      });
+      }, notifications);
     } catch (error) {
       if (signal.aborted) break;
       const reason = error instanceof Error ? error.cause ?? error : error;
