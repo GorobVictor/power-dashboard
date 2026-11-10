@@ -152,11 +152,23 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(5, -100, 18);
       await save(6, 0, 20);
       await save(7, 0, 19);
+      await save(8, 0, 100);
+      await save(9, -100, 99);
+      await save(10, -100, 98);
+      await save(11, 200, 98);
+      await save(12, -100, 98);
+      await save(13, 200, 95);
+      await save(14, 200, 94);
+      await save(15, 0, 94);
+      await save(16, 200, 94);
+      await save(17, -100, null);
       assert.deepEqual(await telegramMessages(), [
         "First · Акумулятор почав заряджатися. Заряд 30%.",
         "First · Акумулятор почав розряджатися. Заряд 19%.",
         "First · Заряд акумулятора впав до 19% (поріг 20%).",
         "First · Заряд акумулятора впав до 19% (поріг 20%).",
+        "First · Акумулятор почав розряджатися. Заряд 98%.",
+        "First · Акумулятор почав заряджатися. Заряд 94%.",
       ]);
       assert.deepEqual(await readBatteryBaseline(db, second.id), { batteryPowerW: null, socPct: 87 });
       await db.query("DELETE FROM telegram_outbox");
