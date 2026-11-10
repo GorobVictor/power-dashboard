@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { timeZone } from "@/server/outages/schedules";
 
 const dateTimeFormat = new Intl.DateTimeFormat("uk-UA", {
@@ -19,19 +20,8 @@ const tones = {
   muted: "border-transparent bg-muted text-muted-foreground",
 };
 
-export function StatusBadge({ tone, children }: { tone: keyof typeof tones; children: string }) {
-  return <Badge variant="outline" className={tones[tone]}>{children}</Badge>;
-}
-
-export function PanelMessage({ title, children }: { title: string; children: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{children}</CardDescription>
-      </CardHeader>
-    </Card>
-  );
+export function StatusBadge({ tone, children, className }: { tone: keyof typeof tones; children: string; className?: string }) {
+  return <Badge variant="outline" className={cn("motion-safe:transition-colors", tones[tone], className)}>{children}</Badge>;
 }
 
 export function PanelSkeleton({ label }: { label: string }) {

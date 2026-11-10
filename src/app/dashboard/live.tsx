@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardOutages, type DashboardStation } from "@/lib/dashboard-feed";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardOutages, type DashboardRequest, type DashboardStation } from "@/lib/dashboard-feed";
+import { addTelemetrySample, telemetrySample } from "@/lib/telemetry-history";
 import { kyivDate } from "@/server/outages/schedules";
 
 type Connection = "connecting" | "connected" | "disconnected";
@@ -12,7 +13,13 @@ type DashboardLiveState = {
   outages: DashboardOutages | undefined;
   outagesStale: boolean;
   today: string;
-  reconnect: () => void;
+  now: number;
+  historySupported: boolean;
+  revision: number;
+  schedulesRevision: number;
+  telemetry: Extract<DashboardMessage, { type: "telemetry" }> | undefined;
+  outageHistory: Extract<DashboardMessage, { type: "outageHistory" }> | undefined;
+  request: (request: DashboardRequest) => void;
 };
 
 const DashboardContext = createContext<DashboardLiveState | null>(null);
@@ -21,9 +28,19 @@ const minuteMs = 60_000;
 export function DashboardLive({ children }: { children: ReactNode }) {
   const [station, setStation] = useState<DashboardStation>();
   const [outages, setOutages] = useState<DashboardOutages>();
+  const [telemetry, setTelemetry] = useState<DashboardLiveState["telemetry"]>();
+  const [outageHistory, setOutageHistory] = useState<DashboardLiveState["outageHistory"]>();
   const [connection, setConnection] = useState<Connection>("connecting");
+  const [historySupported, setHistorySupported] = useState(false);
   const [now, setNow] = useState(0);
-  const [attempt, setAttempt] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const [schedulesRevision, setSchedulesRevision] = useState(0);
+  const activeSocket = useRef<WebSocket | null>(null);
+
+  const request = useCallback((message: DashboardRequest) => {
+    const socket = activeSocket.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }, []);
 
   useEffect(() => {
     let socket: WebSocket;
@@ -34,22 +51,43 @@ export function DashboardLive({ children }: { children: ReactNode }) {
     url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     function connect() {
-      socket = new WebSocket(url);
+      activeSocket.current = socket = new WebSocket(url);
       socket.onmessage = ({ data }) => {
         if (disposed) return;
         const message: DashboardMessage = JSON.parse(data);
         switch (message.type) {
-          case "station": setStation(message.value); break;
-          case "outages": setOutages(message.value); break;
+          case "station": {
+            setStation(message.value);
+            if (message.value.kind === "station" && message.value.measurement) {
+              const sample = telemetrySample(message.value.measurement);
+              setTelemetry((history) => {
+                if (!history?.value) return history;
+                const value = addTelemetrySample(history.value, history.period, sample);
+                return value === history.value ? history : { ...history, value };
+              });
+            }
+            break;
+          }
+          case "outages":
+            setOutages(message.value);
+            if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
+            break;
+          case "telemetry": setTelemetry(message); break;
+          case "outageHistory": setOutageHistory(message); break;
           case "status":
             setConnection(message.connected ? "connected" : "disconnected");
-            if (message.connected) retryMs = 1_000;
+            setHistorySupported(message.history === true);
+            if (message.connected) {
+              retryMs = 1_000;
+              setRevision((value) => value + 1);
+            }
             break;
         }
         setNow(Date.now());
       };
       socket.onclose = ({ code }) => {
         if (disposed) return;
+        activeSocket.current = null;
         if (code === dashboardSessionExpired) {
           window.location.replace("/login");
           return;
@@ -64,10 +102,11 @@ export function DashboardLive({ children }: { children: ReactNode }) {
     connect();
     return () => {
       disposed = true;
+      activeSocket.current = null;
       window.clearTimeout(reconnectTimer);
       socket.close();
     };
-  }, [attempt]);
+  }, []);
 
   const stationExpires = station?.kind === "station" && station.measurement
     ? Date.parse(station.measurement.measuredAt) + station.staleAfterMs : Infinity;
@@ -85,11 +124,8 @@ export function DashboardLive({ children }: { children: ReactNode }) {
   return (
     <DashboardContext.Provider value={{
       connection, station, stationStale: now >= stationExpires, outages, outagesStale: now >= outagesExpire,
-      today: now ? kyivDate(new Date(now)) : "",
-      reconnect: () => {
-        setConnection("connecting");
-        setAttempt((value) => value + 1);
-      },
+      today: now ? kyivDate(new Date(now)) : "", now,
+      historySupported, revision, schedulesRevision, telemetry, outageHistory, request,
     }}>
       {children}
     </DashboardContext.Provider>

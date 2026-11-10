@@ -25,8 +25,8 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
 
   function snapshot(send: typeof publish) {
     if (station) send({ type: "station", value: station });
-    if (outages) send({ type: "outages", value: outages });
-    if (connected !== undefined) send({ type: "status", connected });
+    if (outages) send({ type: "outages", value: outages, schedulesChanged: true });
+    if (connected !== undefined) send({ type: "status", connected, history: true });
   }
 
   async function listen() {
@@ -79,7 +79,7 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
               if (outages.lastSuccessfulPollAt && observedAt <= Date.parse(outages.lastSuccessfulPollAt)) return;
               outages = { ...outages, lastSuccessfulPollAt: update.lastSuccessfulPollAt };
             }
-            publish({ type: "outages", value: outages });
+            publish({ type: "outages", value: outages, schedulesChanged: update.schedulesChanged });
           } else if (update?.type === "station" && update.stationId === stationId) {
             station = await readStation();
             publish({ type: "station", value: station });
@@ -116,7 +116,7 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
       if (signal.aborted) return;
       console.error("Dashboard PostgreSQL listener disconnected", (lost.signal.reason as Error | undefined)?.name);
       connected = false;
-      publish({ type: "status", connected });
+      publish({ type: "status", connected, history: true });
       await delay(retryMs, undefined, { signal, ref: false }).catch(() => undefined);
       retryMs = Math.min(retryMs * 2, 30_000);
     }

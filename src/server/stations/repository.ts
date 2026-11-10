@@ -1,4 +1,5 @@
 import type { Client, Pool } from "pg";
+import { telemetryPeriods, type TelemetryHistory, type TelemetryPeriod } from "../../lib/telemetry-history.ts";
 import type { CollectorStation, LatestMeasurement, Measurement, SerializedMeasurement, Station } from "./types.ts";
 
 export async function registerStation(db: Client, station: CollectorStation) {
@@ -30,7 +31,7 @@ export async function lockStation(db: Client, stationId: string): Promise<boolea
 }
 
 export async function saveMeasurement(db: Client, stationId: string, measurement: Measurement) {
-  await db.query(
+  const { rowCount } = await db.query(
     `INSERT INTO measurements (
        station_id, measured_at, soc_pct, remaining_energy_wh,
        battery_power_w, grid_power_w, ac_output_power_w, backup_load_power_w,
@@ -46,6 +47,7 @@ export async function saveMeasurement(db: Client, stationId: string, measurement
       measurement.monthlyEnergyOutWh, measurement.totalEnergyInWh, measurement.totalEnergyOutWh,
     ],
   );
+  return rowCount === 1;
 }
 
 export async function findLatest(db: Pool | Client, stationId: string): Promise<LatestMeasurement | null> {
@@ -65,4 +67,29 @@ export async function findLatest(db: Pool | Client, stationId: string): Promise<
     station,
     measurement: measurement ? { ...measurement, measuredAt: new Date(measurement.measuredAt) } : null,
   };
+}
+
+export async function findTelemetryHistory(
+  db: Pool | Client, stationId: string, period: TelemetryPeriod, end = Date.now(),
+): Promise<TelemetryHistory> {
+  const { duration, bucket } = telemetryPeriods[period];
+  const { rows } = await db.query<Omit<TelemetryHistory["samples"][number], "time"> & { measuredAt: Date }>(
+    `WITH bounds AS (SELECT $2::timestamptz AS start_at, $3::timestamptz AS end_at, $4::interval AS step)
+     SELECT measured_at AS "measuredAt", soc_pct AS "socPct", battery_power_w AS "batteryPowerW",
+       grid_power_w AS "gridPowerW", backup_load_power_w AS "backupLoadPowerW"
+     FROM bounds
+     CROSS JOIN LATERAL generate_series(
+       date_bin(step, start_at, '1970-01-01 UTC'::timestamptz), end_at, step
+     ) AS bucket(start_at)
+     CROSS JOIN LATERAL (
+       SELECT measured_at, soc_pct, battery_power_w, grid_power_w, backup_load_power_w
+       FROM measurements
+       WHERE station_id = $1 AND measured_at >= GREATEST(bounds.start_at, bucket.start_at)
+         AND measured_at < bucket.start_at + step AND measured_at <= end_at
+       ORDER BY measured_at DESC LIMIT 1
+     ) AS latest
+     ORDER BY bucket.start_at`,
+    [stationId, new Date(end - duration), new Date(end), `${bucket / 1000} seconds`],
+  );
+  return { end, samples: rows.map(({ measuredAt, ...metrics }) => ({ time: measuredAt.getTime(), ...metrics })) };
 }

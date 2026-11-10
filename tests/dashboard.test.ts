@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
 import { clockTime, outageIntervals } from "../src/app/dashboard/outage-intervals.ts";
 import {
   createDashboardSession,
@@ -53,4 +54,16 @@ test("outage intervals respect half-hour boundaries and merge only matching adja
   assert.deepEqual(outageIntervals([]), []);
   assert.equal(clockTime(90), "01:30");
   assert.equal(clockTime(1_440), "24:00");
+});
+
+test("discharge estimate uses remaining energy and battery draw and preserves zero", () => {
+  assert.equal(dischargeMinutes(3_660, -510), 3_660 / 510 * 60);
+  assert.equal(formatDischargeTime(dischargeMinutes(4_680, -150)!), "≈ 1 дн 7 год");
+  assert.equal(formatDischargeTime(119.6), "≈ 2 год 0 хв");
+  assert.equal(formatDischargeTime(0.5), "< 1 хв");
+  assert.equal(dischargeMinutes(0, -150), 0);
+  assert.equal(dischargeMinutes(null, -150), null);
+  assert.equal(dischargeMinutes(4_680, null), null);
+  assert.equal(dischargeMinutes(4_680, 0), null);
+  assert.equal(dischargeMinutes(4_680, 150), null);
 });

@@ -1,8 +1,13 @@
 import type { IncomingMessage, Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage } from "../lib/dashboard-feed.ts";
+import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardRequest } from "../lib/dashboard-feed.ts";
+import { addTelemetrySample, isTelemetryPeriod, telemetrySample, type TelemetrySample } from "../lib/telemetry-history.ts";
 import { dashboardFeed } from "./dashboard-feed.ts";
 import { dashboardAuthConfig, dashboardSessionExpiration, sessionCookieName } from "./dashboard-session.ts";
+import { database } from "./db.ts";
+import { isQueue, isScheduleDate } from "./outages/schedules.ts";
+import { getOutageHistory } from "./outages/service.ts";
+import { findTelemetryHistory } from "./stations/repository.ts";
 
 function sameOrigin({ headers }: IncomingMessage) {
   if (!headers.origin || !URL.canParse(headers.origin)) return false;
@@ -16,9 +21,54 @@ function sessionToken({ headers }: IncomingMessage) {
   return cookie?.slice(prefix.length);
 }
 
+function parseRequest(data: string): DashboardRequest | null {
+  let request;
+  try {
+    request = JSON.parse(data);
+  } catch {
+    return null;
+  }
+  if (request?.type === "telemetry" && isTelemetryPeriod(request.period)) {
+    return { type: "telemetry", period: request.period };
+  }
+  if (request?.type === "outageHistory" && isScheduleDate(request.date) && (request.queue === null || isQueue(request.queue))) {
+    return { type: "outageHistory", date: request.date, queue: request.queue };
+  }
+  return null;
+}
+
+type SocketClient = {
+  alive: boolean;
+  pending: Map<DashboardRequest["type"], DashboardRequest>;
+  telemetrySamples?: TelemetrySample[];
+};
+
+async function loadHistory(request: DashboardRequest, client: SocketClient): Promise<DashboardMessage> {
+  try {
+    if (request.type === "telemetry") {
+      const stationId = process.env.STATION_ID?.trim();
+      if (!stationId) return { ...request, value: { end: Date.now(), samples: [] } };
+      const samples: TelemetrySample[] = [];
+      client.telemetrySamples = samples;
+      try {
+        const history = await findTelemetryHistory(database(), stationId, request.period);
+        const value = samples.reduce((result, sample) => addTelemetrySample(result, request.period, sample), history);
+        return { ...request, value };
+      } finally {
+        delete client.telemetrySamples;
+      }
+    }
+    const versions = await getOutageHistory(request.date, request.queue);
+    return { ...request, value: versions.map((version) => ({ ...version, observedAt: version.observedAt.toISOString() })) };
+  } catch (error) {
+    console.error("Unable to load dashboard history", (error as Error).name);
+    return { ...request, value: null };
+  }
+}
+
 export function attachDashboardSocket(server: Server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
-  const clients = new Map<WebSocket, boolean>();
+  const clients = new Map<WebSocket, SocketClient>();
   const shutdown = new AbortController();
   let snapshot: ReturnType<typeof dashboardFeed> | undefined;
 
@@ -30,7 +80,32 @@ export function attachDashboardSocket(server: Server) {
 
   function broadcast(message: DashboardMessage) {
     const data = JSON.stringify(message);
-    for (const ws of clients.keys()) send(ws, data);
+    const sample = message.type === "station" && message.value.kind === "station" && message.value.measurement
+      ? telemetrySample(message.value.measurement) : null;
+    for (const [ws, client] of clients) {
+      if (sample) client.telemetrySamples?.push(sample);
+      send(ws, data);
+    }
+  }
+
+  async function sendHistory(ws: WebSocket, client: SocketClient, request: DashboardRequest) {
+    const { type } = request;
+    // Keep one query per kind in flight and coalesce rapid filter changes.
+    const busy = client.pending.has(type);
+    client.pending.set(type, request);
+    if (busy) return;
+
+    let next: DashboardRequest | undefined = request;
+    while (next && ws.readyState === WebSocket.OPEN) {
+      const message = await loadHistory(next, client);
+      const latest = client.pending.get(type);
+      if (latest === next) {
+        client.pending.delete(type);
+        send(ws, JSON.stringify(message));
+        return;
+      }
+      next = latest;
+    }
   }
 
   server.on("upgrade", (request, socket, head) => {
@@ -51,15 +126,20 @@ export function attachDashboardSocket(server: Server) {
           ws.close(dashboardSessionExpired);
           return;
         }
-        ws.on("message", () => ws.close(1008));
+        const client: SocketClient = { alive: true, pending: new Map() };
+        ws.on("message", (data, isBinary) => {
+          const request = isBinary ? null : parseRequest(data.toString());
+          if (!request) ws.close(1008);
+          else void sendHistory(ws, client, request);
+        });
         const expiry = setTimeout(() => ws.close(dashboardSessionExpired), expiresAt - Date.now());
         expiry.unref();
         ws.on("close", () => {
           clearTimeout(expiry);
           clients.delete(ws);
         });
-        ws.on("pong", () => clients.set(ws, true));
-        clients.set(ws, true);
+        ws.on("pong", () => { client.alive = true; });
+        clients.set(ws, client);
         snapshot ??= dashboardFeed(broadcast, shutdown.signal);
         snapshot((message) => send(ws, JSON.stringify(message)));
       });
@@ -70,10 +150,10 @@ export function attachDashboardSocket(server: Server) {
   });
 
   const heartbeat = setInterval(() => {
-    for (const [ws, alive] of clients) {
-      if (!alive) ws.terminate();
+    for (const [ws, client] of clients) {
+      if (!client.alive) ws.terminate();
       else if (ws.readyState === WebSocket.OPEN) {
-        clients.set(ws, false);
+        client.alive = false;
         ws.ping();
       }
     }
