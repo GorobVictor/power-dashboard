@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Client } from "pg";
 import { databaseClient } from "../db.ts";
 import { createLogger, errorFields } from "../logger.ts";
-import { sendTelegramMessage, TelegramSendError, type TelegramDestination } from "./client.ts";
+import { sendTelegramMessage, TelegramSendError, type TelegramDestination, type TelegramMessage } from "./client.ts";
 
 const idleMs = 2_000;
 const log = createLogger("worker.telegram");
@@ -10,8 +10,8 @@ const log = createLogger("worker.telegram");
 async function deliverPending(db: Client, destination: TelegramDestination, signal: AbortSignal) {
   let backoff = idleMs;
   while (!signal.aborted) {
-    const { rows: [pending] } = await db.query<{ id: string; message: string }>(
-      "SELECT id, message FROM telegram_outbox ORDER BY id LIMIT 1",
+    const { rows: [pending] } = await db.query<TelegramMessage & { id: string }>(
+      'SELECT id, message AS text, parse_mode AS "parseMode" FROM telegram_outbox ORDER BY id LIMIT 1',
     );
     signal.throwIfAborted();
     if (!pending) {
@@ -20,7 +20,7 @@ async function deliverPending(db: Client, destination: TelegramDestination, sign
     }
 
     try {
-      await sendTelegramMessage(destination, pending.message, signal);
+      await sendTelegramMessage(destination, pending, signal);
     } catch (error) {
       if (!(error instanceof TelegramSendError)) throw error;
       const retryInMs = Math.max(backoff, error.retryAfterMs);

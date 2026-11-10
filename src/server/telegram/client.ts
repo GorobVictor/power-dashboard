@@ -1,4 +1,5 @@
 export type TelegramDestination = { token: string; chatId: string };
+export type TelegramMessage = { text: string; parseMode?: "MarkdownV2" | null };
 
 export class TelegramSendError extends Error {
   readonly retryAfterMs: number;
@@ -10,14 +11,14 @@ export class TelegramSendError extends Error {
 }
 
 export async function sendTelegramMessage(
-  { token, chatId }: TelegramDestination, message: string, shutdown: AbortSignal, request = fetch,
+  { token, chatId }: TelegramDestination, message: TelegramMessage, shutdown: AbortSignal, request = fetch,
 ) {
   const signal = AbortSignal.any([shutdown, AbortSignal.timeout(10_000)]);
   try {
     const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: message }),
+      body: JSON.stringify({ chat_id: chatId, text: message.text, parse_mode: message.parseMode ?? undefined }),
       redirect: "error",
       signal,
     });

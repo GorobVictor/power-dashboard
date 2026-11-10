@@ -19,11 +19,16 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
   await db.connect();
   try {
     await other.connect();
-    const migrate = () => runner({
+    const migrate = (count?: number) => runner({
       dbClient: db, dir: "migrations", direction: "up",
-      schema, createSchema: true, migrationsTable: "pgmigrations",
+      schema, createSchema: true, migrationsTable: "pgmigrations", count,
     });
-    assert.equal((await migrate()).length, 4);
+    assert.equal((await migrate(4)).length, 4);
+    await db.query("INSERT INTO telegram_outbox (message) VALUES ('Legacy message.')");
+    assert.equal((await migrate()).length, 1);
+    assert.deepEqual((await db.query("DELETE FROM telegram_outbox RETURNING message, parse_mode")).rows, [
+      { message: "Legacy message.", parse_mode: null },
+    ]);
     const first = {
       id: "793319323732595650000001", name: "First", model: "VNSE3-0",
       deviceId: "first-device", bleMac: "02:00:00:00:00:01",
@@ -129,8 +134,13 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     });
 
     const telegramMessages = async () => {
-      const { rows } = await db.query<{ message: string }>("SELECT message FROM telegram_outbox ORDER BY id");
-      return rows.map(({ message }) => message);
+      const { rows } = await db.query<{ message: string; parse_mode: string }>(
+        "SELECT message, parse_mode FROM telegram_outbox ORDER BY id",
+      );
+      return rows.map(({ message, parse_mode }) => {
+        assert.equal(parse_mode, "MarkdownV2");
+        return message;
+      });
     };
 
     await t.test("queues battery transitions once and retains known readings through gaps", async () => {
@@ -163,12 +173,12 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(16, 200, 94);
       await save(17, -100, null);
       assert.deepEqual(await telegramMessages(), [
-        "First · Акумулятор почав заряджатися. Заряд 30%.",
-        "First · Акумулятор почав розряджатися. Заряд 19%.",
-        "First · Заряд акумулятора впав до 19% (поріг 20%).",
-        "First · Заряд акумулятора впав до 19% (поріг 20%).",
-        "First · Акумулятор почав розряджатися. Заряд 98%.",
-        "First · Акумулятор почав заряджатися. Заряд 94%.",
+        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *30%*",
+        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *19%*",
+        "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
+        "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
+        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *98%*",
+        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *94%*",
       ]);
       assert.deepEqual(await readBatteryBaseline(db, second.id), { batteryPowerW: null, socPct: 87 });
       await db.query("DELETE FROM telegram_outbox");
@@ -182,11 +192,14 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
         content: { status: "WaitingForSchedule", hours: [], possible: [], publishedSchedule: null },
       };
       const published: Schedule = {
-        ...waiting, content: { ...waiting.content, status: "ScheduleApplies", hours: Array(24).fill(1) },
+        ...waiting, content: {
+          ...waiting.content, status: "ScheduleApplies",
+          hours: [1, 2, 3, ...Array(21).fill(0)], possible: [0, 0, 0, 1, ...Array(20).fill(0)],
+        },
       };
       const otherQueue = { ...published, queue: "4.2" };
       const updated: Schedule = {
-        ...published, content: { ...published.content, status: "NoShutdowns", hours: Array(24).fill(0) },
+        ...published, content: { ...waiting.content, status: "NoShutdowns" },
       };
       const at = (minute: number) => new Date(Date.UTC(2026, 10, 13, 0, minute));
       await saveOutagePollWithTelegram(db, [waiting, otherQueue], at(0), waiting.queue);
@@ -196,10 +209,28 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       const otherChanged = { ...updated, queue: otherQueue.queue };
       await saveOutagePollWithTelegram(db, [published, otherChanged], at(3), waiting.queue);
       await saveOutagePollWithTelegram(db, [updated, otherChanged], at(4), waiting.queue);
-      assert.deepEqual(await telegramMessages(), [
-        "ДТЕК · Київська область · 13.11.2026\nЗ’явився графік для черги 4.1.",
-        "ДТЕК · Київська область · 13.11.2026\nОновився графік для черги 4.1.",
-      ]);
+      const shorter: Schedule = {
+        ...published, content: { ...published.content, hours: [2, ...Array(23).fill(0)] },
+      };
+      const shifted: Schedule = {
+        ...shorter, content: { ...shorter.content, hours: [3, ...Array(23).fill(0)] },
+      };
+      const emergency: Schedule = {
+        ...shifted, content: { ...shifted.content, status: "EmergencyShutdowns", hours: Array(24).fill(9) },
+      };
+      await saveOutagePollWithTelegram(db, [shorter, otherChanged], at(5), waiting.queue);
+      await saveOutagePollWithTelegram(db, [shifted, otherChanged], at(6), waiting.queue);
+      await saveOutagePollWithTelegram(db, [emergency, otherChanged], at(7), waiting.queue);
+      const messages = await telegramMessages();
+      assert.equal(messages.length, 5);
+      assert.equal(messages[0], [
+        "📅 *З’явився графік ДТЕК*", "Черга *4\\.1* · 13\\.11\\.2026 · Київська область", "",
+        "💡 Зі світлом за графіком: *22 год*", "🌑 Без світла за графіком: *2 год*",
+      ].join("\n"));
+      assert.match(messages[1], /Оновився графік ДТЕК[\s\S]*24 год[\s\S]*Світла на \*2 год більше\*/);
+      assert.match(messages[2], /23 год 30 хв[\s\S]*Світла на \*30 хв менше\*/);
+      assert.match(messages[3], /Загальний час зі світлом не змінився/);
+      assert.match(messages[4], /Тривалість відключень за добу поки невідома[\s\S]*Порівняння з попереднім графіком недоступне/);
       assert.equal((await findScheduleHistory(db, waiting.date, otherQueue.queue)).length, 2);
       await db.query("DELETE FROM telegram_outbox");
     });
@@ -223,8 +254,8 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
         db, first, { ...metrics, measuredAt: at(30), batteryPowerW: -100, socPct: 29 }, charging, options,
       );
       assert.deepEqual(await telegramMessages(), [
-        "First · Акумулятор почав заряджатися. Заряд 30%.\nЗа графіком черги 4.1 зараз відключення.",
-        "First · Акумулятор почав розряджатися. Заряд 29%.\nЗа графіком черги 4.1 зараз має бути світло.",
+        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
+        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *29%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
       ]);
       assert.match(await describeOutageAt(db, queue, at(31)), /застарів/);
       assert.match(await describeOutageAt(db, "4.2", at(30)), /недоступний/);

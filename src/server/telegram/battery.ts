@@ -2,6 +2,7 @@ import type { Client } from "pg";
 import { inTransaction } from "../db.ts";
 import { saveMeasurement } from "../stations/repository.ts";
 import type { Measurement, Station } from "../stations/types.ts";
+import { escapeMarkdown } from "./markdown.ts";
 import { describeOutageAt } from "./outages.ts";
 import { enqueueTelegramMessages } from "./outbox.ts";
 
@@ -25,19 +26,21 @@ export async function readBatteryBaseline(db: Client, stationId: string): Promis
 
 function batteryMessages(station: Station, previous: BatteryReading, current: BatteryReading, limit: number) {
   const { batteryPowerW, socPct } = current;
+  if (socPct === null) return [];
   const messages: string[] = [];
-  const name = station.name.slice(0, 200);
+  const name = escapeMarkdown(station.name.slice(0, 200));
+  const details = `${name}\n\nЗаряд: *${socPct}%*`;
 
-  if (socPct !== null && batteryPowerW !== null && previous.batteryPowerW !== null) {
+  if (batteryPowerW !== null && previous.batteryPowerW !== null) {
     if (batteryPowerW > 0 && previous.batteryPowerW <= 0 && socPct < CHARGING_ALERT_BELOW_PCT) {
-      messages.push(`${name} · Акумулятор почав заряджатися. Заряд ${socPct}%.`);
+      messages.push(`⚡ *Акумулятор почав заряджатися*\n${details}`);
     }
     if (batteryPowerW < 0 && previous.batteryPowerW >= 0 && socPct < DISCHARGING_ALERT_BELOW_PCT) {
-      messages.push(`${name} · Акумулятор почав розряджатися. Заряд ${socPct}%.`);
+      messages.push(`🔋 *Акумулятор почав розряджатися*\n${details}`);
     }
   }
-  if (socPct !== null && previous.socPct !== null && socPct < limit && previous.socPct >= limit) {
-    messages.push(`${name} · Заряд акумулятора впав до ${socPct}% (поріг ${limit}%).`);
+  if (previous.socPct !== null && socPct < limit && previous.socPct >= limit) {
+    messages.push(`⚠️ *Низький заряд акумулятора*\n${details}\nПоріг сповіщення: ${limit}%`);
   }
   return messages;
 }
@@ -52,7 +55,7 @@ export async function saveBatteryReading(
     : await inTransaction(db, async () => {
       if (!await saveMeasurement(db, station.id, measurement)) return false;
       const outage = outageQueue && await describeOutageAt(db, outageQueue, measurement.measuredAt);
-      await enqueueTelegramMessages(db, outage ? messages.map((message) => `${message}\n${outage}`) : messages);
+      await enqueueTelegramMessages(db, outage ? messages.map((message) => `${message}\n\n📅 ${escapeMarkdown(outage)}`) : messages);
       return true;
     });
 
