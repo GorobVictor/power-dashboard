@@ -2,7 +2,7 @@
 
 import { Activity, CalendarClock, History, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { BatteryPanel } from "./battery";
 import { OutageHistoryPanel, OutagesPanel } from "./outages";
@@ -17,11 +17,29 @@ const panels = [
 ] as const;
 
 const panelFrame = "grid min-w-0 max-lg:grow";
+const panelStorageKey = "power-dashboard.active-panel";
 type Panel = typeof panels[number]["id"];
+
+function readSavedPanel() {
+  try {
+    const saved = window.localStorage.getItem(panelStorageKey);
+    return panels.find(({ id }) => id === saved)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function subscribeToSavedPanel(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
 
 export function DashboardDeck() {
   const params = useSearchParams();
-  const [active, setActive] = useState<Panel>(() => params.has("date") ? "archive" : "overview");
+  const [defaultPanel] = useState<Panel>(() => params.has("date") ? "archive" : "overview");
+  const [selection, setSelection] = useState<Panel>();
+  const savedPanel = useSyncExternalStore(subscribeToSavedPanel, readSavedPanel, () => null);
+  const active = selection ?? savedPanel ?? defaultPanel;
   const start = useRef<{ x: number; y: number } | null>(null);
 
   function panelClass(panel: Panel) {
@@ -29,9 +47,13 @@ export function DashboardDeck() {
   }
 
   function selectPanel(panel: Panel) {
-    if (active === panel) return;
-    setActive(panel);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    setSelection(panel);
+    try {
+      window.localStorage.setItem(panelStorageKey, panel);
+    } catch {
+      // The in-memory selection still works if browser storage is unavailable.
+    }
+    if (active !== panel) window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   return (
