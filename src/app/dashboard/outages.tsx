@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
 import { clockTime, outageIntervals, outageQueues } from "./outage-intervals";
-import { StatusBadge, Timestamp } from "./panel";
+import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, weekday: "long", day: "numeric", month: "long" });
 const kyivTime = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -164,7 +164,7 @@ export function OutagesPanel() {
     : { label: "Очікуємо дані", tone: "muted" } as const;
 
   return (
-    <Card className="gap-3 py-4">
+    <Card className={cn("gap-3 py-4", mobilePanelClassName)}>
       <CardHeader className="gap-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">
@@ -271,7 +271,7 @@ export function OutageHistoryPanel() {
     : history === null ? "Історія тимчасово недоступна." : "Завантажуємо історію…";
 
   return (
-    <Card className="gap-3 py-4">
+    <Card className={cn("gap-3 py-4", mobilePanelClassName)}>
       <CardHeader className="gap-2.5">
         <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">
           <span className="grid size-8 place-items-center rounded-lg bg-muted text-warning">

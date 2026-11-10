@@ -16,7 +16,7 @@ const panels = [
   { id: "telemetry", controls: "station-telemetry", label: "Виміри", icon: Activity },
 ] as const;
 
-const panelFrame = "grid min-w-0 max-lg:grow";
+const panelFrame = "grid min-w-0";
 const panelStorageKey = "power-dashboard.active-panel";
 type Panel = typeof panels[number]["id"];
 
@@ -73,7 +73,7 @@ export function DashboardDeck() {
         </div>
       </div>
       <div
-        className="gap-3.5 max-lg:flex max-lg:grow max-lg:touch-pan-y max-lg:touch-pinch-zoom max-lg:flex-col sm:gap-4 lg:grid lg:grid-cols-2"
+        className="max-lg:flex max-lg:grow max-lg:touch-pan-y max-lg:touch-pinch-zoom max-lg:flex-col max-lg:rounded-xl max-lg:border max-lg:bg-card max-lg:shadow-xs lg:grid lg:grid-cols-2 lg:gap-4"
         onTouchStart={(event) => {
           start.current = null;
           if (event.touches.length !== 1 || window.matchMedia("(min-width: 64rem)").matches) return;
@@ -104,7 +104,7 @@ export function DashboardDeck() {
         <section id="outage-schedule" aria-label="Графік відключень" className={cn(panelFrame, panelClass("schedule"))}>
           <OutagesPanel />
         </section>
-        <BatteryPanel className={panelClass("overview")} />
+        <BatteryPanel className={cn("max-lg:mx-4 max-lg:mb-4 max-lg:bg-background/50 max-lg:shadow-none sm:max-lg:mx-5", panelClass("overview"))} />
         <section id="outage-archive" aria-label="Історія відключень" className={cn(panelFrame, panelClass("archive"))}>
           <OutageHistoryPanel />
         </section>

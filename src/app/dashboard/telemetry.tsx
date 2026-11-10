@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { defaultTelemetryPeriod, telemetryPeriods, type TelemetryHistory, type TelemetryPeriod, type TelemetrySample } from "@/lib/telemetry-history";
 import { timeZone } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
-import { Timestamp } from "./panel";
+import { mobilePanelClassName, Timestamp } from "./panel";
 
 type Series = { key: Exclude<keyof TelemetrySample, "time">; label: string; color: string };
 
@@ -199,7 +199,7 @@ export function TelemetryPanel() {
     : "Завантажуємо виміри…";
 
   return (
-    <Card className="gap-3 py-4">
+    <Card className={cn("gap-3 py-4", mobilePanelClassName)}>
       <CardHeader className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2.5">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">

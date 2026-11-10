@@ -87,13 +87,15 @@
   }
 }
 
-.power-flow {
-  background-color: #11232b;
-  background-image:
-    radial-gradient(ellipse at 55% 110%, #1d584761, transparent 72%),
-    linear-gradient(#aad7dd0a 1px, transparent 1px),
-    linear-gradient(90deg, #aad7dd0a 1px, transparent 1px);
-  background-size: auto, 24px 24px, 24px 24px;
+@media (width >= 64rem) {
+  .power-flow {
+    background-color: #11232b;
+    background-image:
+      radial-gradient(ellipse at 55% 110%, #1d584761, transparent 72%),
+      linear-gradient(#aad7dd0a 1px, transparent 1px),
+      linear-gradient(90deg, #aad7dd0a 1px, transparent 1px);
+    background-size: auto, 24px 24px, 24px 24px;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

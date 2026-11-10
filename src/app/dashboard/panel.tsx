@@ -8,6 +8,8 @@ const dateTimeFormat = new Intl.DateTimeFormat("uk-UA", {
   timeZone, dateStyle: "medium", timeStyle: "medium",
 });
 
+export const mobilePanelClassName = "max-lg:border-0 max-lg:bg-transparent max-lg:shadow-none";
+
 export function Timestamp({ value }: { value: Date | string }) {
   const date = typeof value === "string" ? new Date(value) : value;
   return <time dateTime={date.toISOString()} className="tabular-nums">{dateTimeFormat.format(date)}</time>;
@@ -24,9 +26,9 @@ export function StatusBadge({ tone, children, className }: { tone: keyof typeof 
   return <Badge variant="outline" className={cn("motion-safe:transition-colors", tones[tone], className)}>{children}</Badge>;
 }
 
-export function PanelSkeleton({ label }: { label: string }) {
+export function PanelSkeleton({ label, className }: { label: string; className?: string }) {
   return (
-    <Card role="status">
+    <Card role="status" className={className}>
       <span className="sr-only">{label}</span>
       <CardHeader aria-hidden="true">
         <Skeleton className="h-5 w-2/5" />
