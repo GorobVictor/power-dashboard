@@ -1,7 +1,11 @@
 import { runner } from "node-pg-migrate";
 import { stationFromEnvironment } from "./config.ts";
-import { databaseClient, databaseErrorMessage } from "./db.ts";
+import { databaseClient } from "./db.ts";
+import { createLogger, errorFields, errorMessage } from "./logger.ts";
 import { registerStation } from "./stations/repository.ts";
+
+const log = createLogger("bootstrap");
+const migrationLog = createLogger("migrations");
 
 async function bootstrap() {
   const station = stationFromEnvironment();
@@ -13,10 +17,11 @@ async function bootstrap() {
       dir: "migrations",
       direction: "up",
       migrationsTable: "pgmigrations",
+      logger: migrationLog,
     });
     if (station) {
       await registerStation(client, station);
-      console.info("Registered station", station.id);
+      log.info("Registered station", { stationId: station.id });
     }
   } finally {
     await client.end();
@@ -24,6 +29,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error("Database bootstrap failed", databaseErrorMessage(error));
+  log.error("Database bootstrap failed", { ...errorFields(error), reason: errorMessage(error) });
   process.exitCode = 1;
 });

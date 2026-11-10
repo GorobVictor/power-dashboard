@@ -1,5 +1,8 @@
 import { authorizeApiRequest, json } from "../api.ts";
+import { createLogger, errorFields } from "../logger.ts";
 import type { getLatestMeasurement } from "./service.ts";
+
+const log = createLogger("api.stations");
 
 export async function latestController(
   request: Request,
@@ -12,7 +15,7 @@ export async function latestController(
     const latest = await getLatest(stationId);
     return latest ? json(latest, 200) : json({ error: "station_not_found" }, 404);
   } catch (error) {
-    console.error("Unable to read latest measurement", (error as Error).name);
+    log.error("Unable to read latest measurement", { stationId, ...errorFields(error) });
     return json({ error: "service_unavailable" }, 503);
   }
 }

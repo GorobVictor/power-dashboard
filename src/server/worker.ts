@@ -1,11 +1,14 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { positiveInteger, telegramFromEnvironment } from "./config.ts";
-import { databaseClient, databaseErrorMessage } from "./db.ts";
+import { databaseClient } from "./db.ts";
+import { createLogger, errorFields, errorMessage } from "./logger.ts";
 import { collectOutageSchedules } from "./outages/collector.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
 import type { BatteryNotificationOptions } from "./telegram/battery.ts";
 import { deliverTelegramNotifications } from "./telegram/worker.ts";
+
+const log = createLogger("worker");
 
 async function enabledStations() {
   const db = databaseClient();
@@ -32,27 +35,31 @@ async function runMarstek(signal: AbortSignal, notifications?: BatteryNotificati
       const connect = macos?.connectMacos
         ?? (await import("./marstek/bluez.ts")).bluezConnector(process.env.BLE_ADAPTER || "hci0");
       try {
-        console.info("Starting Marstek worker", { host, interval, stations: stations.length });
+        log.info("Starting Marstek worker", { host, pollIntervalMs: interval, stationCount: stations.length });
         await Promise.all(stations.map((station) => collectStation(station, connect, interval, signal, notifications)));
       } finally {
         macos?.stopMacos();
       }
       return;
     }
-    console.info("No enabled Marstek stations. Checking again in 30 seconds");
+    log.info("No enabled Marstek stations", { retryInMs: 30_000 });
     await delay(30_000, undefined, { signal });
   }
 }
 
 const shutdown = new AbortController();
-process.once("SIGINT", () => shutdown.abort());
-process.once("SIGTERM", () => shutdown.abort());
+function stop(signal: NodeJS.Signals) {
+  log.info("Stopping worker", { signal });
+  shutdown.abort();
+}
+process.once("SIGINT", stop);
+process.once("SIGTERM", stop);
 
 let telegram: ReturnType<typeof telegramFromEnvironment> = null;
 try {
   telegram = telegramFromEnvironment();
 } catch (error) {
-  console.warn("Telegram notifications disabled", databaseErrorMessage(error));
+  log.warn("Telegram notifications disabled", { reason: errorMessage(error) });
 }
 
 const collectors = [
@@ -64,7 +71,7 @@ try {
   await Promise.all(collectors);
 } catch (error) {
   if (!shutdown.signal.aborted) {
-    console.error("Worker failed", databaseErrorMessage(error));
+    log.error("Worker failed", { ...errorFields(error), reason: errorMessage(error) });
     shutdown.abort();
     process.exitCode = 1;
   }

@@ -2,6 +2,7 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import type { DashboardMessage, DashboardOutages, DashboardStation } from "../lib/dashboard-feed.ts";
 import { databaseClient } from "./db.ts";
+import { createLogger, errorFields } from "./logger.ts";
 import { findCurrentSchedules, outageSourceId } from "./outages/repository.ts";
 import { kyivDate } from "./outages/schedules.ts";
 import { outageStaleAfterMs } from "./outages/service.ts";
@@ -15,6 +16,7 @@ type Update =
   | { type: "outages"; source: string; lastSuccessfulPollAt: string; schedulesChanged: boolean };
 
 const channel = "power_dashboard_updates";
+const log = createLogger("dashboard.feed");
 
 export function dashboardFeed(publish: (message: DashboardMessage) => void, signal: AbortSignal) {
   const stationId = process.env.STATION_ID?.trim();
@@ -102,6 +104,7 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
           outages = initialOutages;
           connected = true;
           retryMs = 1_000;
+          log.info("Dashboard PostgreSQL listener ready");
           snapshot(publish);
         });
         await updates;
@@ -114,7 +117,10 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
       }
 
       if (signal.aborted) return;
-      console.error("Dashboard PostgreSQL listener disconnected", (lost.signal.reason as Error | undefined)?.name);
+      log.warn("Dashboard PostgreSQL listener disconnected", {
+        ...errorFields(lost.signal.reason),
+        retryInMs: retryMs,
+      });
       connected = false;
       publish({ type: "status", connected, history: true });
       await delay(retryMs, undefined, { signal, ref: false }).catch(() => undefined);

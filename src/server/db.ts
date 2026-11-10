@@ -1,4 +1,7 @@
 import { Client, Pool } from "pg";
+import { createLogger, errorFields } from "./logger.ts";
+
+const log = createLogger("postgres");
 
 const connectionOptions = {
   connectionTimeoutMillis: 3_000,
@@ -13,7 +16,7 @@ export function database(): Pool {
   if (!pool) {
     pool = new Pool({ ...connectionOptions, max: 5 });
     pool.on("error", (error: Error) => {
-      console.error("Idle PostgreSQL connection lost", error.name);
+      log.error("Idle PostgreSQL connection lost", errorFields(error));
     });
   }
   return pool;
@@ -33,11 +36,4 @@ export async function inTransaction<T>(db: Client, work: () => Promise<T>): Prom
     await db.query("ROLLBACK").catch(() => {});
     throw error;
   }
-}
-
-export function databaseErrorMessage(error: unknown): string {
-  if (error instanceof AggregateError && error.errors.length) {
-    return error.errors.map(databaseErrorMessage).join(", ");
-  }
-  return error instanceof Error ? error.message || error.name : String(error);
 }

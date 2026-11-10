@@ -1,4 +1,7 @@
 import { getCredentials, matchesCredentials } from "./credentials.ts";
+import { createLogger } from "./logger.ts";
+
+const log = createLogger("api");
 
 function isAuthorized(header: string | null, credentials: NonNullable<ReturnType<typeof getCredentials>>) {
   const encoded = /^Basic +([A-Za-z0-9+/]+={0,2})$/i.exec(header ?? "")?.[1];
@@ -25,7 +28,7 @@ export function authorizeApiRequest(request: Request): Response | null {
   const authorization = request.headers.get("Authorization");
   const credentials = getCredentials();
   if (!credentials) {
-    console.error("Invalid Basic Auth configuration");
+    log.error("Invalid Basic Auth configuration");
     return json({ error: "service_unavailable" }, 503);
   }
   if (!isAuthorized(authorization, credentials)) {

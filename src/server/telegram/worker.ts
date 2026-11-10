@@ -1,9 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { Client } from "pg";
-import { databaseClient, databaseErrorMessage } from "../db.ts";
+import { databaseClient } from "../db.ts";
+import { createLogger, errorFields } from "../logger.ts";
 import { sendTelegramMessage, TelegramSendError, type TelegramDestination } from "./client.ts";
 
 const idleMs = 2_000;
+const log = createLogger("worker.telegram");
 
 async function deliverPending(db: Client, destination: TelegramDestination, signal: AbortSignal) {
   let backoff = idleMs;
@@ -21,12 +23,14 @@ async function deliverPending(db: Client, destination: TelegramDestination, sign
       await sendTelegramMessage(destination, pending.message, signal);
     } catch (error) {
       if (!(error instanceof TelegramSendError)) throw error;
-      console.warn("Telegram delivery will retry", error.message);
-      await delay(Math.max(backoff, error.retryAfterMs), undefined, { signal });
+      const retryInMs = Math.max(backoff, error.retryAfterMs);
+      log.warn("Telegram delivery will retry", { outboxId: pending.id, reason: error.message, retryInMs });
+      await delay(retryInMs, undefined, { signal });
       backoff = Math.min(backoff * 2, 60_000);
       continue;
     }
     await db.query("DELETE FROM telegram_outbox WHERE id = $1", [pending.id]);
+    log.info("Delivered Telegram notification", { outboxId: pending.id });
     backoff = idleMs;
     await delay(1_100, undefined, { signal });
   }
@@ -45,9 +49,14 @@ export async function deliverTelegramNotifications(destination: TelegramDestinat
       const { rows: [lock] } = await db.query<{ acquired: boolean }>(
         "SELECT pg_try_advisory_lock(hashtextextended('telegram:outbox', 0)) AS acquired",
       );
-      if (lock.acquired) await deliverPending(db, destination, signal);
+      if (lock.acquired) {
+        log.info("Starting Telegram delivery");
+        await deliverPending(db, destination, signal);
+      }
     } catch (error) {
-      if (!shutdown.aborted) console.warn("Telegram delivery interrupted", databaseErrorMessage(error));
+      if (!shutdown.aborted) {
+        log.warn("Telegram delivery interrupted", { ...errorFields(error), retryInMs: idleMs });
+      }
     } finally {
       await db.end();
     }

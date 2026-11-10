@@ -14,12 +14,15 @@ export interface BleConnection extends ByteConnection {
 
 export type ConnectStation = (station: CollectorStation, signal: AbortSignal) => Promise<BleConnection>;
 
+const requestTimeoutMs = 4_000;
+
 export async function requestFrame(
   connection: ByteConnection,
   command: typeof STATE | typeof DEVICE_INFO,
   parentSignal: AbortSignal,
 ): Promise<Buffer> {
-  const signal = AbortSignal.any([parentSignal, connection.signal, AbortSignal.timeout(4_000)]);
+  const timeout = AbortSignal.timeout(requestTimeoutMs);
+  const signal = AbortSignal.any([parentSignal, connection.signal, timeout]);
   signal.throwIfAborted();
   const decoder = new FrameDecoder();
   const response = Promise.withResolvers<Buffer>();
@@ -33,6 +36,12 @@ export async function requestFrame(
       connection.write(readCommand(command), signal),
     ]), signal);
     return payload;
+  } catch (error) {
+    if (timeout.aborted && error === timeout.reason) {
+      const name = command === STATE ? "STATE" : "DEVICE_INFO";
+      throw new DOMException(`BLE request ${name} timed out after ${requestTimeoutMs} ms`, "TimeoutError");
+    }
+    throw error;
   } finally {
     unsubscribe();
   }

@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient } from "../db.ts";
+import { createLogger, errorFields, errorMessage } from "../logger.ts";
 import { requestFrame, type ConnectStation } from "../marstek/client.ts";
 import { decodeState, STATE } from "../marstek/protocol.ts";
 import { readBatteryBaseline, saveBatteryReading, type BatteryNotificationOptions } from "../telegram/battery.ts";
@@ -8,6 +9,7 @@ import type { CollectorStation } from "./types.ts";
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
+const log = createLogger("worker.marstek");
 
 async function collectWithLock(
   station: CollectorStation,
@@ -22,40 +24,55 @@ async function collectWithLock(
   db.on("error", (error) => dbLost.abort(error));
   db.on("end", () => dbLost.abort(new Error("Station lock connection closed")));
   const signal = AbortSignal.any([shutdown, dbLost.signal]);
+  let stage = "database.connect";
 
   try {
     await db.connect();
     signal.throwIfAborted();
+    stage = "database.lock";
     if (!await lockStation(db, station.id)) return;
+    stage = "database.load";
     let battery = notifications ? await readBatteryBaseline(db, station.id) : null;
     signal.throwIfAborted();
 
+    stage = "ble.connect";
     const connection = await connect(station, signal);
     try {
-      console.info("Connected to station", station.id);
+      log.info("Connected to station", { stationId: station.id });
 
       const session = AbortSignal.any([signal, connection.signal]);
+      let firstMeasurement = true;
       let nextAt = performance.now();
       for (;;) {
+        stage = "ble.read";
         const payload = await requestFrame(connection, STATE, session);
         const measuredAt = new Date();
         session.throwIfAborted();
+        stage = "ble.decode";
         const measurement = { measuredAt, ...decodeState(payload) };
+        stage = "database.save";
         if (battery && notifications) {
           battery = await saveBatteryReading(db, station, measurement, battery, notifications);
         } else {
           await saveMeasurement(db, station.id, measurement);
         }
         onSuccess();
+        if (firstMeasurement) {
+          log.info("First BLE measurement processed", { stationId: station.id });
+          firstMeasurement = false;
+        }
 
         nextAt += interval;
         const now = performance.now();
         if (nextAt < now) nextAt += Math.ceil((now - nextAt) / interval) * interval;
+        stage = "ble.wait";
         await delay(Math.max(0, nextAt - now), undefined, { signal: session });
       }
     } finally {
       await connection.close();
     }
+  } catch (error) {
+    throw new Error(dbLost.signal.aborted ? "database.connection" : stage, { cause: error });
   } finally {
     await db.end();
   }
@@ -76,8 +93,16 @@ export async function collectStation(
       }, notifications);
     } catch (error) {
       if (signal.aborted) break;
-      const reason = error instanceof Error ? error.cause ?? error : error;
-      console.warn("Station polling interrupted", station.id, reason instanceof Error ? reason.message : reason);
+      const stage = error instanceof Error && error.cause !== undefined ? error.message : "database.close";
+      const failure = error instanceof Error ? error.cause ?? error : error;
+      const reason = failure instanceof Error && failure.name === "AbortError" ? failure.cause ?? failure : failure;
+      log.warn("Station polling interrupted", {
+        stationId: station.id,
+        stage,
+        retryInMs: backoff,
+        ...errorFields(reason),
+        reason: stage.startsWith("ble.") ? errorMessage(reason) : undefined,
+      });
     }
     if (signal.aborted) break;
     try {

@@ -5,9 +5,12 @@ import { addTelemetrySample, isTelemetryPeriod, telemetrySample, type TelemetryS
 import { dashboardFeed } from "./dashboard-feed.ts";
 import { dashboardAuthConfig, dashboardSessionExpiration, sessionCookieName } from "./dashboard-session.ts";
 import { database } from "./db.ts";
+import { createLogger, errorFields } from "./logger.ts";
 import { isQueue, isScheduleDate } from "./outages/schedules.ts";
 import { getOutageHistory } from "./outages/service.ts";
 import { findTelemetryHistory } from "./stations/repository.ts";
+
+const log = createLogger("dashboard.websocket");
 
 function sameOrigin({ headers }: IncomingMessage) {
   if (!headers.origin || !URL.canParse(headers.origin)) return false;
@@ -61,7 +64,7 @@ async function loadHistory(request: DashboardRequest, client: SocketClient): Pro
     const versions = await getOutageHistory(request.date, request.queue);
     return { ...request, value: versions.map((version) => ({ ...version, observedAt: version.observedAt.toISOString() })) };
   } catch (error) {
-    console.error("Unable to load dashboard history", (error as Error).name);
+    log.error("Unable to load dashboard history", { requestType: request.type, ...errorFields(error) });
     return { ...request, value: null };
   }
 }
@@ -121,7 +124,10 @@ export function attachDashboardSocket(server: Server) {
     void expiration.then((expiresAt) => {
       if (socket.destroyed || !socket.writable) return;
       wss.handleUpgrade(request, socket, head, (ws) => {
-        ws.on("error", () => ws.terminate());
+        ws.on("error", (error) => {
+          log.warn("Dashboard WebSocket failed", errorFields(error));
+          ws.terminate();
+        });
         if (!expiresAt) {
           ws.close(dashboardSessionExpired);
           return;
@@ -144,7 +150,7 @@ export function attachDashboardSocket(server: Server) {
         snapshot((message) => send(ws, JSON.stringify(message)));
       });
     }).catch((error: Error) => {
-      console.error("Unable to open dashboard WebSocket", error.name);
+      log.error("Unable to open dashboard WebSocket", errorFields(error));
       socket.destroy();
     });
   });

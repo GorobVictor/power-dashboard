@@ -1,11 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { databaseClient, databaseErrorMessage } from "../db.ts";
+import { databaseClient } from "../db.ts";
+import { createLogger, errorFields } from "../logger.ts";
 import { saveOutagePollWithTelegram } from "../telegram/outages.ts";
 import { AlertsHttpError, fetchSchedules } from "./client.ts";
 import { lockOutageSource, saveOutagePoll } from "./repository.ts";
 import { AlertsSourceError } from "./schedules.ts";
 
 const intervalMs = 60_000;
+const log = createLogger("worker.outages");
 
 export async function collectOutageSchedules(shutdown: AbortSignal, telegramQueue?: string) {
   let nextPoll = performance.now();
@@ -22,7 +24,7 @@ export async function collectOutageSchedules(shutdown: AbortSignal, telegramQueu
       signal.throwIfAborted();
 
       if (await lockOutageSource(db)) {
-        console.info("Starting alerts.energy polling");
+        log.info("Starting alerts.energy polling", { pollIntervalMs: intervalMs });
         while (!signal.aborted) {
           while (nextPoll > performance.now()) {
             await delay(Math.min(nextPoll - performance.now(), 2_147_483_647), undefined, { signal });
@@ -40,13 +42,18 @@ export async function collectOutageSchedules(shutdown: AbortSignal, telegramQueu
             if (error instanceof AlertsHttpError && error.retryAfterMs > 0) {
               nextPoll = Math.max(nextPoll, performance.now() + error.retryAfterMs);
             }
-            console.warn("alerts.energy poll failed", error instanceof AlertsSourceError
-              ? error.message : (error as Error).name);
+            log.warn("alerts.energy poll failed", {
+              ...errorFields(error),
+              reason: error instanceof AlertsSourceError ? error.message : undefined,
+              retryInMs: Math.max(0, Math.ceil(nextPoll - performance.now())),
+            });
           }
         }
       }
     } catch (error) {
-      if (!shutdown.aborted) console.warn("alerts.energy collector interrupted", databaseErrorMessage(error));
+      if (!shutdown.aborted) {
+        log.warn("alerts.energy collector interrupted", { ...errorFields(error), retryInMs: intervalMs });
+      }
     } finally {
       await db.end();
     }

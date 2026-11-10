@@ -1,6 +1,9 @@
 import { authorizeApiRequest, json } from "../api.ts";
+import { createLogger, errorFields } from "../logger.ts";
 import { isQueue, isScheduleDate } from "./schedules.ts";
 import { getCurrentOutages, getOutageHistory, outageSource } from "./service.ts";
+
+const log = createLogger("api.outages");
 
 function queueFilter(params: URLSearchParams) {
   const queue = params.get("queue");
@@ -20,7 +23,7 @@ export async function currentOutages(request: Request, read?: Parameters<typeof 
   try {
     return json(await getCurrentOutages(queue, now, read), 200);
   } catch (error) {
-    console.error("Unable to read current outage schedules", (error as Error).name);
+    log.error("Unable to read current outage schedules", { queue, ...errorFields(error) });
     return json({ error: "service_unavailable" }, 503);
   }
 }
@@ -40,7 +43,7 @@ export async function outageHistory(request: Request, read = getOutageHistory) {
     const versions = await read(date, queue);
     return json({ ...outageSource, date, versions }, 200);
   } catch (error) {
-    console.error("Unable to read outage schedule history", (error as Error).name);
+    log.error("Unable to read outage schedule history", { date, queue, ...errorFields(error) });
     return json({ error: "service_unavailable" }, 503);
   }
 }
