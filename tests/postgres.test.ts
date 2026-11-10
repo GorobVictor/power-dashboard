@@ -177,21 +177,27 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(7, 0, 19);
       await save(8, 0, 100);
       await save(9, -100, 99);
-      await save(10, -100, 98);
-      await save(11, 200, 98);
-      await save(12, -100, 98);
-      await save(13, 200, 99);
-      await save(14, 200, 94);
-      await save(15, 0, 94);
-      await save(16, 200, 94);
-      await save(17, -100, null);
+      await save(10, 200, 99);
+      await save(11, -100, 100);
+      await save(12, -100, 99);
+      battery = await readBatteryBaseline(db, first.id);
+      await save(13, -100, 98);
+      await save(14, -100, 97);
+      await save(15, 200, 97);
+      await save(16, -100, 97);
+      await save(17, 200, 99);
+      await save(18, 200, 94);
+      await save(19, 0, 94);
+      await save(20, 200, 94);
+      await save(21, -100, null);
       assert.deepEqual(await telegramMessages(), [
         "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *30%*",
         "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *19%*",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
-        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *98%*",
-        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *98%*",
+        "🔋 *Акумулятор розрядився нижче 99%*\nFirst\n\nЗаряд: *98%*",
+        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *97%*",
+        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *97%*",
         "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *94%*",
       ]);
       assert.deepEqual(await readBatteryBaseline(db, second.id), { batteryPowerW: null, socPct: 87 });
