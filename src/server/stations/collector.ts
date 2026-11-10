@@ -2,13 +2,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient } from "../db.ts";
 import { createLogger, errorFields, errorMessage } from "../logger.ts";
 import { requestFrame, type ConnectStation } from "../marstek/client.ts";
-import { decodeState, STATE } from "../marstek/protocol.ts";
+import { decodeState, decodeUpsEnabled, GET_WORK_MODE_SETTINGS, STATE } from "../marstek/protocol.ts";
 import { readBatteryBaseline, saveBatteryReading, type BatteryNotificationOptions } from "../telegram/battery.ts";
 import { lockStation, saveMeasurement } from "./repository.ts";
 import type { CollectorStation } from "./types.ts";
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
+const UPS_POLL_INTERVAL_MS = 10_000;
 const log = createLogger("worker.marstek");
 
 async function collectWithLock(
@@ -43,13 +44,30 @@ async function collectWithLock(
       const session = AbortSignal.any([signal, connection.signal]);
       let firstMeasurement = true;
       let nextAt = performance.now();
+      let nextUpsPoll = 0;
+      let upsEnabled: boolean | null = null;
       for (;;) {
         stage = "ble.read";
         const payload = await requestFrame(connection, STATE, session);
         const measuredAt = new Date();
         session.throwIfAborted();
         stage = "ble.decode";
-        const measurement = { measuredAt, ...decodeState(payload) };
+        const metrics = decodeState(payload);
+        if (metrics.workMode !== 1) {
+          nextUpsPoll = 0;
+          upsEnabled = null;
+        } else if (performance.now() >= nextUpsPoll) {
+          stage = "ble.readUps";
+          try {
+            upsEnabled = decodeUpsEnabled(await requestFrame(connection, GET_WORK_MODE_SETTINGS, session));
+          } catch {
+            session.throwIfAborted();
+            // A failed settings read should not discard the telemetry sample.
+            upsEnabled = null;
+          }
+          nextUpsPoll = performance.now() + UPS_POLL_INTERVAL_MS;
+        }
+        const measurement = { measuredAt, ...metrics, upsEnabled };
         stage = "database.save";
         if (battery && notifications) {
           battery = await saveBatteryReading(db, station, measurement, battery, notifications);

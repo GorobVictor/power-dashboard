@@ -31,6 +31,9 @@ export function BatteryPanel({ className }: { className?: string }) {
   const contentId = useId();
   const { station } = useDashboardLive();
   const measurement = station?.kind === "station" ? station.measurement : null;
+  const workMode = measurement?.workMode === 1 && measurement.upsEnabled !== false
+    ? measurement.upsEnabled ? "UPS" : "Ручний / UPS · невідомо"
+    : mode(measurement?.workMode ?? null, workModes);
 
   return (
     <Card id="station-details" className={cn("min-w-0 gap-0 py-0 lg:pt-4", className, !measurement && "max-lg:hidden")}>
@@ -64,7 +67,7 @@ export function BatteryPanel({ className }: { className?: string }) {
                 <Metric label="Потужність мережі"><MetricValue value={measurement.gridPowerW} unit="Вт" signed /></Metric>
                 <Metric label="Потужність AC-виходу"><MetricValue value={measurement.acOutputPowerW} unit="Вт" signed /></Metric>
                 <Metric label="Стан інвертора">{mode(measurement.inverterState, inverterStates)}</Metric>
-                <Metric label="Режим роботи">{mode(measurement.workMode, workModes)}</Metric>
+                <Metric label="Режим роботи">{workMode}</Metric>
               </dl>
               <p className="text-xs text-muted-foreground">Для мережі й AC-виходу «+» означає віддачу, «−» — споживання.</p>
               <div className="space-y-2">

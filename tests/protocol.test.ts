@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { requestFrame } from "../src/server/marstek/client.ts";
 import {
-  decodeState, DEVICE_INFO, FrameDecoder, readCommand, STATE, verifyDevice,
+  decodeState, decodeUpsEnabled, DEVICE_INFO, FrameDecoder, GET_WORK_MODE_SETTINGS, readCommand, STATE, verifyDevice,
 } from "../src/server/marstek/protocol.ts";
 
 function responseFrame(command: number, payload: Buffer, transition = false) {
@@ -65,6 +65,31 @@ test("normalizes the VNSE3 telemetry layout and preserves zeros", () => {
   assert.equal(decodeState(payload).socPct, null);
   assert.equal(decodeState(payload).remainingEnergyWh, null);
   assert.throws(() => decodeState(payload.subarray(0, 133)), /payload length/);
+});
+
+test("reads the UPS flag from the tenth work-mode slot", async () => {
+  const slots = Buffer.alloc(80);
+  slots[7] = 1; // A regular manual slot can be enabled independently of UPS.
+  assert.equal(decodeUpsEnabled(slots), false);
+  slots[79] = 1;
+  assert.equal(decodeUpsEnabled(slots.subarray(0, 79)), null);
+  const frame = responseFrame(GET_WORK_MODE_SETTINGS, slots, true);
+  let notify: ((bytes: Buffer) => void) | undefined;
+  const connection = {
+    signal: new AbortController().signal,
+    onBytes(listener: (bytes: Buffer) => void) {
+      notify = listener;
+      return () => { notify = undefined; };
+    },
+    async write(bytes: Buffer) {
+      assert.equal(bytes.toString("hex"), "7306230a015d");
+      notify?.(frame.subarray(0, 20));
+      notify?.(frame.subarray(20));
+    },
+  };
+  assert.equal(decodeUpsEnabled(await requestFrame(connection, GET_WORK_MODE_SETTINGS, connection.signal)), true);
+  slots[79] = 255;
+  assert.equal(decodeUpsEnabled(slots), null);
 });
 
 test("matches the requested command and unsubscribes after an interrupted request", async () => {

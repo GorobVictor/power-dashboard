@@ -5,14 +5,18 @@ const MARKER = 0x23;
 const MAX_FRAME_BYTES = 4096;
 export const STATE = 0x03;
 export const DEVICE_INFO = 0x04;
+export const GET_WORK_MODE_SETTINGS = 0x0a;
+export type ReadCommand = typeof STATE | typeof DEVICE_INFO | typeof GET_WORK_MODE_SETTINGS;
 
 function checksum(bytes: Uint8Array): number {
   return bytes.reduce((xor, byte) => xor ^ byte, 0);
 }
 
-export function readCommand(command: typeof STATE | typeof DEVICE_INFO): Buffer {
-  const header = Buffer.from([MAGIC, 5, MARKER, command]);
-  return Buffer.concat([header, Buffer.from([checksum(header)])]);
+export function readCommand(command: ReadCommand): Buffer {
+  const body = command === GET_WORK_MODE_SETTINGS
+    ? Buffer.from([MAGIC, 6, MARKER, command, 0x01])
+    : Buffer.from([MAGIC, 5, MARKER, command]);
+  return Buffer.concat([body, Buffer.from([checksum(body)])]);
 }
 
 export interface Frame {
@@ -92,4 +96,10 @@ export function decodeState(payload: Buffer): Metrics {
     totalEnergyInWh: payload.readUInt32LE(41) * 10,
     totalEnergyOutWh: payload.readUInt32LE(45) * 10,
   };
+}
+
+export function decodeUpsEnabled(payload: Buffer): boolean | null {
+  // The tenth work-mode slot is reserved for UPS. Its eighth byte is the enable flag.
+  const enabled = payload[9 * 8 + 7];
+  return enabled === 0x01 ? true : enabled === 0x00 ? false : null;
 }

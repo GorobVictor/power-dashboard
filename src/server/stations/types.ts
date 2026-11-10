@@ -28,9 +28,10 @@ export interface Metrics {
 
 export interface Measurement extends Metrics {
   measuredAt: Date;
+  upsEnabled: boolean | null;
 }
 
-export type SerializedMeasurement = Metrics & { measuredAt: string };
+export type SerializedMeasurement = Omit<Measurement, "measuredAt"> & { measuredAt: string };
 
 export interface LatestMeasurement {
   station: Station;

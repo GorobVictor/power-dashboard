@@ -36,8 +36,8 @@ export async function saveMeasurement(db: Client, stationId: string, measurement
        station_id, measured_at, soc_pct, remaining_energy_wh,
        battery_power_w, grid_power_w, ac_output_power_w, backup_load_power_w,
        inverter_state, work_mode, daily_energy_in_wh, daily_energy_out_wh,
-       monthly_energy_in_wh, monthly_energy_out_wh, total_energy_in_wh, total_energy_out_wh
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       monthly_energy_in_wh, monthly_energy_out_wh, total_energy_in_wh, total_energy_out_wh, ups_enabled
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      ON CONFLICT (station_id, measured_at) DO NOTHING`,
     [
       stationId, measurement.measuredAt, measurement.socPct, measurement.remainingEnergyWh,
@@ -45,6 +45,7 @@ export async function saveMeasurement(db: Client, stationId: string, measurement
       measurement.backupLoadPowerW, measurement.inverterState, measurement.workMode,
       measurement.dailyEnergyInWh, measurement.dailyEnergyOutWh, measurement.monthlyEnergyInWh,
       measurement.monthlyEnergyOutWh, measurement.totalEnergyInWh, measurement.totalEnergyOutWh,
+      measurement.upsEnabled,
     ],
   );
   return rowCount === 1;

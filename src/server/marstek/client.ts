@@ -1,5 +1,5 @@
 import { abortable } from "./abort.ts";
-import { DEVICE_INFO, FrameDecoder, readCommand, STATE } from "./protocol.ts";
+import { DEVICE_INFO, FrameDecoder, GET_WORK_MODE_SETTINGS, readCommand, STATE, type ReadCommand } from "./protocol.ts";
 import type { CollectorStation } from "../stations/types.ts";
 
 interface ByteConnection {
@@ -14,14 +14,19 @@ export interface BleConnection extends ByteConnection {
 
 export type ConnectStation = (station: CollectorStation, signal: AbortSignal) => Promise<BleConnection>;
 
-const requestTimeoutMs = 4_000;
+const commands = {
+  [STATE]: { name: "STATE", timeoutMs: 4_000 },
+  [DEVICE_INFO]: { name: "DEVICE_INFO", timeoutMs: 4_000 },
+  [GET_WORK_MODE_SETTINGS]: { name: "GET_WORK_MODE_SETTINGS", timeoutMs: 2_000 },
+};
 
 export async function requestFrame(
   connection: ByteConnection,
-  command: typeof STATE | typeof DEVICE_INFO,
+  command: ReadCommand,
   parentSignal: AbortSignal,
 ): Promise<Buffer> {
-  const timeout = AbortSignal.timeout(requestTimeoutMs);
+  const { name, timeoutMs } = commands[command];
+  const timeout = AbortSignal.timeout(timeoutMs);
   const signal = AbortSignal.any([parentSignal, connection.signal, timeout]);
   signal.throwIfAborted();
   const decoder = new FrameDecoder();
@@ -38,8 +43,7 @@ export async function requestFrame(
     return payload;
   } catch (error) {
     if (timeout.aborted && error === timeout.reason) {
-      const name = command === STATE ? "STATE" : "DEVICE_INFO";
-      throw new DOMException(`BLE request ${name} timed out after ${requestTimeoutMs} ms`, "TimeoutError");
+      throw new DOMException(`BLE request ${name} timed out after ${timeoutMs} ms`, "TimeoutError");
     }
     throw error;
   } finally {
