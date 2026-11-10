@@ -6,8 +6,7 @@ import { escapeMarkdown } from "./markdown.ts";
 import { describeOutageAt } from "./outages.ts";
 import { enqueueTelegramMessages } from "./outbox.ts";
 
-const CHARGING_ALERT_BELOW_PCT = 95;
-const DISCHARGING_ALERT_BELOW_PCT = 99;
+const BATTERY_TRANSITION_ALERT_BELOW_PCT = 99;
 
 type BatteryReading = Pick<Measurement, "batteryPowerW" | "socPct">;
 export type BatteryNotificationOptions = { lowBatteryPct: number; outageQueue?: string };
@@ -31,11 +30,11 @@ function batteryMessages(station: Station, previous: BatteryReading, current: Ba
   const name = escapeMarkdown(station.name.slice(0, 200));
   const details = `${name}\n\nЗаряд: *${socPct}%*`;
 
-  if (batteryPowerW !== null && previous.batteryPowerW !== null) {
-    if (batteryPowerW > 0 && previous.batteryPowerW <= 0 && socPct < CHARGING_ALERT_BELOW_PCT) {
+  if (socPct < BATTERY_TRANSITION_ALERT_BELOW_PCT && batteryPowerW !== null && previous.batteryPowerW !== null) {
+    if (batteryPowerW > 0 && previous.batteryPowerW <= 0) {
       messages.push(`⚡ *Акумулятор почав заряджатися*\n${details}`);
     }
-    if (batteryPowerW < 0 && previous.batteryPowerW >= 0 && socPct < DISCHARGING_ALERT_BELOW_PCT) {
+    if (batteryPowerW < 0 && previous.batteryPowerW >= 0) {
       messages.push(`🔋 *Акумулятор почав розряджатися*\n${details}`);
     }
   }
