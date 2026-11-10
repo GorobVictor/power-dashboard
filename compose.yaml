@@ -22,6 +22,11 @@ services:
       timeout: 3s
       retries: 30
     restart: unless-stopped
+    networks:
+      default: {}
+      shared:
+        aliases:
+          - timeflow_postgres
 
   bootstrap:
     image: ${COMPOSE_PROJECT_NAME:-power-dashboard}-worker:local
@@ -45,7 +50,7 @@ services:
       context: .
       target: api
     ports:
-      - "127.0.0.1:${API_PORT:-3000}:3000"
+      - "${API_PORT:-4000}:3000"
     environment:
       <<: *database-env
       API_USERNAME: ${API_USERNAME:?Set API_USERNAME in .env}
@@ -58,6 +63,8 @@ services:
       bootstrap:
         condition: service_completed_successfully
     restart: unless-stopped
+    networks:
+      - default
 
   worker:
     image: ${COMPOSE_PROJECT_NAME:-power-dashboard}-worker:local
@@ -91,3 +98,8 @@ services:
 
 volumes:
   postgres-data:
+
+networks:
+  shared:
+    external: true
+    name: "shared"
