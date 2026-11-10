@@ -48,7 +48,7 @@ function outageMinutes(content: ScheduleContent | null) {
   if (!content || content.hours.includes(9)) return null;
   if (content.status === "NoShutdowns") return 0;
   if (content.status !== "ScheduleApplies" || content.hours.length !== 24) return null;
-  return content.hours.reduce((total, code) => total + 30 *
+  return content.hours.reduce<number>((total, code) => total + 30 *
     (Number(coversTime(code, 0)) + Number(coversTime(code, 30))), 0);
 }
 
