@@ -1,5 +1,6 @@
 import { LogOut, Zap } from "lucide-react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { ConnectionStatus } from "./dashboard/connection-status";
@@ -22,10 +23,12 @@ export default function Home() {
 }
 
 async function Dashboard() {
-  if (await dashboardSession() !== "authenticated") redirect("/login");
+  const mock = process.env.NODE_ENV === "development" && process.env.DASHBOARD_MOCK === "1";
+  if (mock) await connection();
+  else if (await dashboardSession() !== "authenticated") redirect("/login");
 
   return (
-    <DashboardLive>
+    <DashboardLive mock={mock}>
       <div className="max-lg:flex max-lg:min-h-dvh max-lg:flex-col">
         <header className="border-b bg-card">
           <div className="mx-auto flex min-h-14 max-w-7xl flex-wrap items-center justify-between gap-x-2 gap-y-0.5 px-3.5 py-1.5 sm:px-6">
@@ -36,12 +39,12 @@ async function Dashboard() {
               Power Dashboard
             </div>
             <div className="flex items-center gap-1 sm:gap-3">
-              <ConnectionStatus />
-              <form action={signOut}>
+              <ConnectionStatus mock={mock} />
+              {!mock && <form action={signOut}>
                 <Button variant="ghost" type="submit" aria-label="Вийти" className="size-9 px-0 sm:w-auto sm:px-3">
                   <LogOut aria-hidden="true" /> <span className="hidden sm:inline">Вийти</span>
                 </Button>
-              </form>
+              </form>}
             </div>
           </div>
         </header>

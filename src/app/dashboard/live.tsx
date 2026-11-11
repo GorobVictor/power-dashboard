@@ -26,7 +26,7 @@ type DashboardLiveState = {
 const DashboardContext = createContext<DashboardLiveState | null>(null);
 const minuteMs = 60_000;
 
-export function DashboardLive({ children }: { children: ReactNode }) {
+export function DashboardLive({ children, mock }: { children: ReactNode; mock: boolean }) {
   const [station, setStation] = useState<DashboardStation>();
   const [outages, setOutages] = useState<DashboardOutages>();
   const [telemetry, setTelemetry] = useState<DashboardLiveState["telemetry"]>();
@@ -37,65 +37,94 @@ export function DashboardLive({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(0);
   const [revision, setRevision] = useState(0);
   const [schedulesRevision, setSchedulesRevision] = useState(0);
-  const activeSocket = useRef<WebSocket | null>(null);
+  const sendRequest = useRef<(message: DashboardRequest) => void>(null);
 
   const request = useCallback((message: DashboardRequest) => {
-    const socket = activeSocket.current;
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    sendRequest.current?.(message);
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    let retryMs = 1_000;
+
+    function receive(message: DashboardMessage) {
+      switch (message.type) {
+        case "station": {
+          setStation(message.value);
+          if (message.value.kind === "station" && message.value.measurement) {
+            const sample = telemetrySample(message.value.measurement);
+            setTelemetry((history) => {
+              if (!history?.value) return history;
+              const value = addTelemetrySample(history.value, history.period, sample);
+              return value === history.value ? history : { ...history, value };
+            });
+            setChargeHistory((history) => {
+              if (!history?.value) return history;
+              const value = addTelemetrySample(history.value, "dates", sample);
+              return value === history.value ? history : { ...history, value };
+            });
+          }
+          break;
+        }
+        case "outages":
+          setOutages(message.value);
+          if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
+          break;
+        case "telemetry": setTelemetry(message); break;
+        case "chargeHistory": setChargeHistory(message); break;
+        case "outageHistory": setOutageHistory(message); break;
+        case "status":
+          setConnection(message.connected ? "connected" : "disconnected");
+          setHistorySupported(message.history === true);
+          if (message.connected) {
+            retryMs = 1_000;
+            setRevision((value) => value + 1);
+          }
+          break;
+      }
+      setNow(Date.now());
+    }
+
+    if (mock) {
+      let timer: number | undefined;
+      void import("./mock-feed").then(({ mockStation, mockOutages, mockHistory }) => {
+        if (disposed) return;
+        let previousDate = "";
+        const publish = () => {
+          const now = Date.now();
+          const today = kyivDate(new Date(now));
+          receive(mockStation(now));
+          receive(mockOutages(now, today, today !== previousDate));
+          previousDate = today;
+        };
+        sendRequest.current = (message) => receive(mockHistory(message, Date.now()));
+        publish();
+        receive({ type: "status", connected: true, history: true });
+        timer = window.setInterval(publish, 30_000);
+      });
+      return () => {
+        disposed = true;
+        sendRequest.current = null;
+        window.clearInterval(timer);
+      };
+    }
+
     let socket: WebSocket;
     let reconnectTimer: number | undefined;
-    let retryMs = 1_000;
-    let disposed = false;
     const url = new URL(dashboardSocketPath, window.location.href);
     url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     function connect() {
-      activeSocket.current = socket = new WebSocket(url);
+      socket = new WebSocket(url);
+      sendRequest.current = (message) => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+      };
       socket.onmessage = ({ data }) => {
-        if (disposed) return;
-        const message: DashboardMessage = JSON.parse(data);
-        switch (message.type) {
-          case "station": {
-            setStation(message.value);
-            if (message.value.kind === "station" && message.value.measurement) {
-              const sample = telemetrySample(message.value.measurement);
-              setTelemetry((history) => {
-                if (!history?.value) return history;
-                const value = addTelemetrySample(history.value, history.period, sample);
-                return value === history.value ? history : { ...history, value };
-              });
-              setChargeHistory((history) => {
-                if (!history?.value) return history;
-                const value = addTelemetrySample(history.value, "dates", sample);
-                return value === history.value ? history : { ...history, value };
-              });
-            }
-            break;
-          }
-          case "outages":
-            setOutages(message.value);
-            if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
-            break;
-          case "telemetry": setTelemetry(message); break;
-          case "chargeHistory": setChargeHistory(message); break;
-          case "outageHistory": setOutageHistory(message); break;
-          case "status":
-            setConnection(message.connected ? "connected" : "disconnected");
-            setHistorySupported(message.history === true);
-            if (message.connected) {
-              retryMs = 1_000;
-              setRevision((value) => value + 1);
-            }
-            break;
-        }
-        setNow(Date.now());
+        if (!disposed) receive(JSON.parse(data));
       };
       socket.onclose = ({ code }) => {
         if (disposed) return;
-        activeSocket.current = null;
+        sendRequest.current = null;
         if (code === dashboardSessionExpired) {
           window.location.replace("/login");
           return;
@@ -110,11 +139,11 @@ export function DashboardLive({ children }: { children: ReactNode }) {
     connect();
     return () => {
       disposed = true;
-      activeSocket.current = null;
+      sendRequest.current = null;
       window.clearTimeout(reconnectTimer);
       socket.close();
     };
-  }, []);
+  }, [mock]);
 
   const stationExpires = station?.kind === "station" && station.measurement
     ? Date.parse(station.measurement.measuredAt) + station.staleAfterMs : Infinity;

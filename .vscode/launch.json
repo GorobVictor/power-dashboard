@@ -11,6 +11,15 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Web Mock",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:mock"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Worker",
       "type": "node",
       "request": "launch",

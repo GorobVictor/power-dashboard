@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_ENV=development node src/server/web.ts",
+    "dev:mock": "DASHBOARD_MOCK=1 next dev --hostname 127.0.0.1 --port 3001",
     "build": "next build",
     "start": "NODE_ENV=production node src/server/web.ts",
     "lint": "eslint",
