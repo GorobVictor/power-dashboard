@@ -16,7 +16,7 @@ const panels = [
   { id: "telemetry", controls: "station-telemetry", label: "Виміри", icon: Activity },
 ] as const;
 
-const panelFrame = "grid min-w-0";
+const panelFrame = "min-w-0 lg:grid";
 const panelStorageKey = "power-dashboard.active-panel";
 type Panel = typeof panels[number]["id"];
 
@@ -81,7 +81,7 @@ export function DashboardDeck() {
         </div>
       </div>
       <div
-        className="max-lg:flex max-lg:grow max-lg:touch-pan-y max-lg:touch-pinch-zoom max-lg:flex-col max-lg:rounded-xl max-lg:border max-lg:bg-card max-lg:shadow-xs lg:grid lg:grid-cols-2 lg:gap-4"
+        className="max-lg:flex max-lg:grow max-lg:touch-pan-y max-lg:touch-pinch-zoom max-lg:flex-col max-lg:rounded-xl max-lg:border max-lg:bg-card max-lg:shadow-xs lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-3"
         onTouchStart={(event) => {
           start.current = null;
           if (event.touches.length !== 1 || window.matchMedia("(min-width: 64rem)").matches) return;

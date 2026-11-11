@@ -94,6 +94,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
   const active = selection === undefined ? undefined : available.find(
     (sample) => Math.floor(sample.time / bucket) === selection,
   );
+  const shown = active ?? available.at(-1);
 
   function selectFraction(fraction: number) {
     if (available.length === 0) return;
@@ -106,8 +107,13 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
 
   return (
     <figure className="min-w-0">
-      <figcaption id={label} className="mb-2 flex items-baseline gap-2 text-sm font-semibold">
-        {title}<span className="text-xs font-normal text-muted-foreground">{unit}</span>
+      <figcaption id={label} className="mb-2 flex items-baseline justify-between gap-2 text-sm font-semibold">
+        <span>{title} <span className="text-xs font-normal text-muted-foreground">{unit}</span></span>
+        {overlay && (
+          <span className="flex items-center gap-1.5 text-[0.6875rem] font-normal text-muted-foreground">
+            <span aria-hidden="true" className="h-2.5 border-l border-dashed border-foreground/70" />Зараз
+          </span>
+        )}
       </figcaption>
       {available.length === 0 && !overlay ? (
         <div className="grid h-43 place-items-center rounded-lg border border-dashed text-center text-sm text-muted-foreground sm:h-52 lg:h-44 xl:h-52">
@@ -116,7 +122,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
       ) : (
         <>
           <p id={instructions} className="sr-only">Натисніть стрілку ліворуч або праворуч, щоб переглянути виміри.</p>
-          <div className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-x-1.5 sm:grid-cols-[3.15rem_minmax(0,1fr)]">
+          <div className={cn("grid min-w-0 gap-x-1.5", overlay ? "grid-cols-[1.55rem_minmax(0,1fr)]" : "grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3.15rem_minmax(0,1fr)]")}>
             <div aria-hidden="true" className="relative text-right text-[0.625rem] text-muted-foreground tabular-nums sm:text-xs">
               {plot.ticks.map((value) => (
                 <span key={value} className="absolute right-0 -translate-y-1/2" style={{ top: `${plot.y(value) / 2}%` }}>{number.format(value)}</span>
@@ -124,7 +130,8 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
             </div>
             <div
               role="group" tabIndex={available.length ? 0 : undefined} aria-labelledby={label} aria-describedby={available.length ? instructions : undefined}
-              className="relative h-34 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-40 lg:h-32 xl:h-40"
+              className={cn("relative rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                overlay ? "h-28 sm:h-32 xl:h-36" : "h-34 sm:h-40 lg:h-32 xl:h-40")}
               onPointerMove={(event) => {
                 if (event.pointerType !== "mouse") return;
                 const bounds = event.currentTarget.getBoundingClientRect();
@@ -185,8 +192,16 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
               ))}
             </div>
           </div>
-          {overlay && !available.length ? (
-            <p role="status" className="mt-2 text-xs text-muted-foreground">{overlay.emptyMessage}</p>
+          {overlay ? shown?.socPct != null ? (
+            <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground tabular-nums" aria-live="polite">
+              <strong className="font-semibold text-[var(--schedule-charge)]">{number.format(shown.socPct)}%</strong>
+              <time dateTime={new Date(shown.time).toISOString()}>{timeFormat.format(shown.time)}</time>
+              {shown.batteryPowerW !== null && shown.batteryPowerW !== 0 && (
+                <span>{shown.batteryPowerW > 0 ? "Заряджається" : "Розряджається"} · {number.format(Math.abs(shown.batteryPowerW))} Вт</span>
+              )}
+            </p>
+          ) : (
+            <p role="status" className="mt-1.5 text-xs text-muted-foreground">{overlay.emptyMessage}</p>
           ) : (
             <div className="mt-2 space-y-0.5 text-xs text-muted-foreground" aria-live="polite">
               <ul className="flex flex-wrap gap-x-3 gap-y-1">
@@ -202,9 +217,6 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
               </ul>
               <p className="min-h-4">
                 {active && <Timestamp value={new Date(active.time)} />}
-                {overlay && active?.batteryPowerW != null && active.batteryPowerW !== 0 && (
-                  ` · ${active.batteryPowerW > 0 ? "Заряджається" : "Розряджається"}, ${number.format(Math.abs(active.batteryPowerW))} Вт`
-                )}
               </p>
             </div>
           )}

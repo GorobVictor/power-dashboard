@@ -9,51 +9,38 @@ import { MetricValue } from "./metric-value";
 import { mobilePanelClassName, PanelSkeleton, StatusBadge, Timestamp } from "./panel";
 
 const tones = {
-  grid: "bg-muted text-muted-foreground lg:bg-sky-400/15 lg:text-sky-200",
-  station: "bg-success-surface text-success lg:bg-emerald-400/20 lg:text-emerald-200",
-  home: "bg-warning-surface text-warning lg:bg-amber-400/15 lg:text-amber-200",
+  grid: "bg-muted text-[var(--chart-grid)]",
+  station: "bg-success-surface text-success",
+  home: "bg-warning-surface text-warning",
 };
 
-function FlowNode({
-  icon: Icon, name, value, unit, hint, tone, batteryPowerW,
-}: {
+function FlowNode({ icon: Icon, name, value, unit, hint, tone }: {
   icon: LucideIcon;
   name: string;
   value: number | null;
   unit: string;
   hint: string;
   tone: keyof typeof tones;
-  batteryPowerW?: number | null;
 }) {
   return (
     <div className={cn(
-      "grid min-w-0 grid-rows-[auto_auto_auto_1fr] justify-items-center gap-y-1 rounded-lg border bg-background/50 px-1 py-2.5 text-center sm:px-3 sm:py-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-rows-[auto_auto_1fr] lg:items-center lg:gap-x-3 lg:gap-y-0.5 lg:rounded-xl lg:border-white/12 lg:bg-slate-950/45 lg:px-3.5 lg:text-left",
-      tone === "station" && "border-success/30 bg-success-surface/40 lg:border-emerald-300/35 lg:bg-emerald-950/55",
+      "grid min-w-0 content-start justify-items-center gap-0.5 rounded-lg border bg-background/55 px-1.5 py-2 text-center sm:grid-cols-[auto_minmax(0,1fr)] sm:justify-items-start sm:gap-x-2.5 sm:px-3 sm:text-left",
+      tone === "station" && "border-success/45 bg-success-surface/45",
     )}>
-      <div className={cn("mb-0.5 grid size-8 place-items-center rounded-lg sm:size-9 lg:row-span-2 lg:mb-0", tones[tone])}>
-        <Icon aria-hidden="true" className="size-[18px]" />
+      <div className={cn("mb-0.5 grid size-6 place-items-center rounded-md sm:row-span-3 sm:mb-0 sm:size-8 sm:self-center", tones[tone])}>
+        <Icon aria-hidden="true" className="size-3.5 sm:size-4" />
       </div>
-      <p className="text-xs font-medium sm:text-sm lg:justify-self-start lg:text-slate-200">{name}</p>
-      <p className="text-[clamp(1rem,4.5vw,1.25rem)] leading-tight font-semibold tracking-tight whitespace-nowrap sm:text-2xl lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:justify-self-end">
+      <p className="text-[0.6875rem] font-medium text-muted-foreground sm:text-xs">{name}</p>
+      <p className={cn("text-[clamp(0.875rem,3.7vw,1.125rem)] leading-tight font-semibold tracking-tight wrap-anywhere sm:text-2xl",
+        tone === "station" && "text-success")}>
         <MetricValue value={value} unit={unit} />
       </p>
-      <p className="text-[0.6875rem] leading-snug text-muted-foreground sm:text-xs lg:col-start-2 lg:row-start-2 lg:justify-self-start lg:text-slate-300">{hint}</p>
-      {batteryPowerW !== undefined && (
-        <p className="col-span-3 row-start-3 mt-1 hidden w-full flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 self-end border-t border-white/12 pt-1.5 text-xs leading-snug text-slate-300 lg:flex">
-          <span>Потужність батареї</span>
-          <span className="font-semibold whitespace-nowrap text-slate-100"><MetricValue value={batteryPowerW} unit="Вт" signed /></span>
-        </p>
-      )}
-      {tone === "station" && (
-        <div
-          role={value === null ? undefined : "progressbar"} aria-label="Рівень заряду" aria-valuenow={value ?? undefined}
-          aria-hidden={value === null}
-          className="mt-1.5 h-1 w-[80%] self-end overflow-hidden rounded-full bg-success/20 sm:max-w-36 lg:col-span-3 lg:row-start-3 lg:mt-2 lg:w-full lg:max-w-none lg:bg-emerald-200/15"
-        >
-          <div
-            className="h-full origin-left rounded-full bg-success motion-safe:transition-transform motion-safe:duration-500 motion-safe:ease-out lg:bg-emerald-200"
-            style={{ transform: `scaleX(${(value ?? 0) / 100})` }}
-          />
+      <p className="text-[0.625rem] leading-snug text-muted-foreground sm:text-xs">{hint}</p>
+      {tone === "station" && value !== null && (
+        <div role="progressbar" aria-label="Рівень заряду" aria-valuenow={value}
+          className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-success/20 sm:col-span-2">
+          <div className="h-full origin-left rounded-full bg-success motion-safe:transition-transform motion-safe:duration-500 motion-safe:ease-out"
+            style={{ transform: `scaleX(${value / 100})` }} />
         </div>
       )}
     </div>
@@ -64,12 +51,12 @@ function FlowLink({ direction, animate }: { direction: "right" | "left" | null; 
   const Arrow = direction === "left" ? ArrowLeft : ArrowRight;
   return (
     <div aria-hidden="true" className={cn(
-      "relative flex h-px items-center justify-center self-center bg-border text-success lg:bg-slate-500/65 lg:text-emerald-200",
-      direction && "bg-success/65 lg:bg-emerald-400/65",
+      "relative flex h-px items-center justify-center self-center bg-border text-success",
+      direction && "bg-success/55",
       direction && animate && "power-flow-pulse",
       direction === "left" && "power-flow-reverse",
     )}>
-      {direction && <Arrow className="relative size-3.5 rounded-full bg-card sm:size-4 lg:bg-[#15333a]" />}
+      {direction && <Arrow className="relative size-3 rounded-full bg-card sm:size-4" />}
     </div>
   );
 }
@@ -96,23 +83,23 @@ export function PowerFlow() {
     : stale ? "Останній відомий стан" : "Актуальні дані";
 
   return (
-    <Card className={cn("power-flow gap-3 px-4 py-4 sm:px-5 lg:gap-4 lg:border-[#28424b] lg:py-5 lg:text-slate-50", mobilePanelClassName)}>
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-base font-semibold tracking-tight wrap-break-word sm:text-lg lg:text-2xl">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-success-surface text-success lg:hidden">
-              <Zap aria-hidden="true" className="size-4" />
-            </span>
-            <span className="min-w-0">{current?.station.name ?? "Потік енергії"}</span>
-          </h1>
-          {current && <p className="mt-0.5 text-xs text-muted-foreground lg:mt-1 lg:text-slate-300">Потік енергії · {current.station.model}</p>}
+    <Card className={cn("power-flow gap-2.5 px-4 py-3.5 sm:px-5", mobilePanelClassName)}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-success-surface text-success">
+            <Zap aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-base leading-tight font-semibold tracking-tight sm:text-lg">Потік енергії</h1>
+            {current && <p className="text-xs text-muted-foreground wrap-break-word">{current.station.name} · {current.station.model}</p>}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:justify-end">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end">
           <StatusBadge tone={!measurement ? "muted" : stale ? "warning" : "success"}>{status}</StatusBadge>
-          {measurement && <span title="Час виміру за Києвом" className="text-xs text-muted-foreground lg:text-slate-300"><Timestamp value={measurement.measuredAt} /></span>}
+          {measurement && <span title="Час виміру за Києвом" className="text-[0.6875rem] text-muted-foreground"><Timestamp value={measurement.measuredAt} /></span>}
         </div>
       </div>
-      <div className="grid w-full grid-cols-[minmax(0,1fr)_clamp(12px,3.5vw,44px)_minmax(0,1fr)_clamp(12px,3.5vw,44px)_minmax(0,1fr)]">
+      <div className="grid w-full grid-cols-[minmax(0,1fr)_clamp(14px,3vw,32px)_minmax(0,1.15fr)_clamp(14px,3vw,32px)_minmax(0,1fr)]">
         <FlowNode icon={UtilityPole} name="Мережа" value={grid === null ? null : Math.abs(grid)} unit="Вт" tone="grid"
           hint={grid === null ? "Немає даних" : grid < 0 ? "До станції" : grid > 0 ? "Від станції" : "Без обміну"} />
         <FlowLink direction={gridDirection} animate={!stale} />
@@ -120,29 +107,26 @@ export function PowerFlow() {
           hint={battery === null ? "Немає даних" : battery < 0 ? "Розряд" : battery > 0 ? "Заряд" : "У спокої"} />
         <FlowLink direction={home !== null && home > 0 ? "right" : null} animate={!stale} />
         <FlowNode icon={House} name="Дім" value={home === null || home < 0 ? null : home} unit="Вт" tone="home"
-          hint="Резервний вихід" batteryPowerW={battery} />
+          hint="Резервний вихід" />
       </div>
       {current && (
-        <div className="divide-y rounded-lg border bg-background/50 lg:border-emerald-200/15 lg:bg-emerald-950/35">
-          <div className="flex min-h-9 items-center justify-between gap-2 px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm lg:hidden">
-            <p className="flex items-center gap-2 font-medium">
-              <Battery aria-hidden="true" className="size-4 shrink-0 text-success" />
+        <dl className="grid gap-y-1 border-t pt-2 text-xs sm:grid-cols-2 sm:gap-x-4">
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 sm:border-r sm:pr-4">
+            <dt className="flex items-center gap-1.5 text-muted-foreground">
+              <Battery aria-hidden="true" className="size-3.5 shrink-0 text-success" />
               Потужність батареї
-            </p>
-            <p className="font-semibold whitespace-nowrap"><MetricValue value={battery} unit="Вт" signed /></p>
+            </dt>
+            <dd className="font-semibold whitespace-nowrap"><MetricValue value={battery} unit="Вт" signed /></dd>
           </div>
-          <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-1.5 sm:px-3"
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2"
             title="Залишок енергії поділено на поточну потужність розряду батареї">
-            <div className="flex items-center gap-2">
-              <Timer aria-hidden="true" className="size-4 shrink-0 text-success lg:text-emerald-200" />
-              <div>
-                <p className="text-xs font-medium sm:text-sm">До повного розряду</p>
-                <p className="text-[0.625rem] text-muted-foreground sm:text-xs lg:text-slate-300">За поточного розряду</p>
-              </div>
-            </div>
-            <p className={cn("text-right text-xs font-semibold tabular-nums sm:text-sm", runtime === null ? "text-muted-foreground lg:text-slate-300" : "text-success lg:text-emerald-200")}>{runtimeText}</p>
+            <dt className="flex items-center gap-1.5 text-muted-foreground">
+              <Timer aria-hidden="true" className="size-3.5 shrink-0 text-success" />
+              До повного розряду
+            </dt>
+            <dd className={cn("font-semibold tabular-nums", runtime === null ? "text-muted-foreground" : "text-success")}>{runtimeText}</dd>
           </div>
-        </div>
+        </dl>
       )}
     </Card>
   );

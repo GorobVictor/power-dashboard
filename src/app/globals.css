@@ -24,7 +24,7 @@
   --chart-charge: #16755a;
   --chart-grid: #2364ac;
   --chart-backup: #935414;
-  --schedule-power: #f7e6b5;
+  --schedule-power: rgb(247 230 181);
   --schedule-outage: #c1ccd9;
   --schedule-unknown: #e7edf3;
   --schedule-charge: #145941;
@@ -76,7 +76,7 @@
     --chart-charge: #8cd6b9;
     --chart-grid: #83baf6;
     --chart-backup: #ffcf89;
-    --schedule-power: #4d3e26;
+    --schedule-power: rgb(77 62 38);
     --schedule-outage: #10161f;
     --schedule-unknown: #283440;
     --schedule-charge: #9de6c9;
@@ -101,12 +101,7 @@
 
 @media (width >= 64rem) {
   .power-flow {
-    background-color: #11232b;
-    background-image:
-      radial-gradient(ellipse at 55% 110%, #1d584761, transparent 72%),
-      linear-gradient(#aad7dd0a 1px, transparent 1px),
-      linear-gradient(90deg, #aad7dd0a 1px, transparent 1px);
-    background-size: auto, 24px 24px, 24px 24px;
+    background-image: radial-gradient(ellipse at 52% 0%, color-mix(in srgb, var(--success-surface) 65%, transparent), transparent 72%);
   }
 }
 
