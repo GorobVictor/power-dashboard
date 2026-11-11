@@ -9,7 +9,7 @@ import { Input, inputClassName } from "@/components/ui/input";
 import type { DashboardSchedule } from "@/lib/dashboard-feed";
 import { shiftTelemetryDate, telemetryWindow, type TelemetryHistory } from "@/lib/telemetry-history";
 import { cn } from "@/lib/utils";
-import { clockTime, outageIntervals, outageQueues, scheduleIntervals, type ScheduleInterval } from "@/server/outages/intervals";
+import { clockTime, kyivMinute, minutesPerDay, outageIntervals, outageQueues, scheduleBands, scheduleIntervals, type ScheduleInterval } from "@/server/outages/intervals";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
@@ -17,14 +17,12 @@ import { ScheduleChargeChart } from "./telemetry";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, weekday: "long", day: "numeric", month: "long" });
 const tabDateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, day: "numeric", month: "short" });
-const kyivTime = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const statuses = {
   ScheduleApplies: { label: "Діє графік", tone: "warning" },
   WaitingForSchedule: { label: "Очікується графік", tone: "muted" },
   NoShutdowns: { label: "Без відключень", tone: "success" },
   EmergencyShutdowns: { label: "Аварійні обмеження", tone: "danger" },
 } as const;
-const minutesPerDay = 24 * 60;
 const queueStorageKey = "power-dashboard.outage-queue";
 type Intervals = ReturnType<typeof outageIntervals>;
 type ChargeHistory = { history: TelemetryHistory; now: number; emptyMessage: string };
@@ -35,11 +33,6 @@ const scheduleColors = {
   possible: { label: "Можливе відключення", fill: "schedule-possible" },
   unknown: { label: "Без даних", fill: "bg-[var(--schedule-unknown)]" },
 } as const;
-
-function kyivMinute(time: number) {
-  const [hour, minute] = kyivTime.format(time).split(":").map(Number);
-  return hour * 60 + minute;
-}
 
 function ScheduleDate({ value }: { value: string }) {
   return <time dateTime={value}>{dateFormat.format(new Date(`${value}T00:00:00Z`))}</time>;
@@ -75,18 +68,7 @@ function ScheduleIntervals({ intervals, planned, possible }: { intervals: Schedu
 
 function ScheduleBands({ intervals, day }: { intervals: ScheduleInterval[]; day?: TelemetryHistory }) {
   const duration = day ? (day.end - day.start) / 60_000 : minutesPerDay;
-  let bands = intervals;
-  if (day && duration !== minutesPerDay) {
-    // The schedule uses Kyiv clock hours, while measurements use elapsed time.
-    bands = [];
-    for (let start = 0; start < duration; start += 30) {
-      const minute = kyivMinute(day.start + start * 60_000);
-      const kind = intervals.find((interval) => interval.start <= minute && minute < interval.end)?.kind ?? "unknown";
-      const previous = bands.at(-1);
-      if (previous?.kind === kind) previous.end = start + 30;
-      else bands.push({ start, end: start + 30, kind });
-    }
-  }
+  const bands = day ? scheduleBands(intervals, day) : intervals;
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm ring-1 ring-inset ring-border">
       {bands.map(({ start, end, kind }) => (
@@ -340,7 +322,7 @@ export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules
           <p className="text-[0.6875rem] text-muted-foreground" title={operator.name}>
             ДТЕК · Київська область
             {checkedAt && <>{" · Перевірено "}<span title={dateFormat.format(new Date(checkedAt))}>
-              <time className="tabular-nums" dateTime={checkedAt}>{kyivTime.format(new Date(checkedAt))}</time>
+              <time className="tabular-nums" dateTime={checkedAt}>{clockTime(kyivMinute(Date.parse(checkedAt)))}</time>
             </span></>}
           </p>
           <StatusBadge tone={status.tone}>{status.label}</StatusBadge>

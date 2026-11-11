@@ -113,7 +113,13 @@ docker compose logs -f api worker
 
 ## Homarr
 
-У Homarr створи Custom API widget з HTTP source. Вкажи URL, доступний серверу Homarr, вибери **Basic** для Authentication і збережи логін та пароль з `.env`. За замовчуванням API опубліковано лише на `127.0.0.1` хоста. Локально запит можна перевірити через `curl`, який запитає пароль інтерактивно.
+Імпортуй [віджет батареї](homarr/homarr-battery.json) і [віджет відключень](homarr/homarr-outages.json) у **Management → Custom Widgets**, а потім додай їх на дошку як **Custom API**. Для наявних віджетів можна оновити JSX у поточних визначеннях. Команда `jq -r .template homarr/homarr-outages.json` виводить JSX графіка. Для батареї використай `homarr/homarr-battery.json`.
+
+Після оновлення Power Dashboard зміни шлях запиту `schedule` у віджеті відключень на `/api/v1/outages/overview`. Для нового імпорту шлях уже задано в JSON.
+
+У джерелі кожного віджета вкажи URL, доступний серверу Homarr, вибери **Basic** для Authentication і збережи логін та пароль з `.env`. На дошці задай ID станції для батареї й номер черги для графіка. У графіку можна вибрати сьогодні, завтра або наступну опубліковану дату. Сьогоднішні зони показують історію заряду станції з `STATION_ID` у Power Dashboard. На шкалі без вимірів точний час інтервалу доступний у підказці.
+
+За замовчуванням API опубліковано лише на `127.0.0.1` хоста. Локально запит можна перевірити через `curl`, який запитає пароль інтерактивно.
 
 ```sh
 curl --user homarr 'http://127.0.0.1:3000/api/v1/stations/marstek-home/latest'
@@ -163,16 +169,18 @@ curl --user homarr 'http://127.0.0.1:3000/api/v1/stations/marstek-home/latest'
 
 Збір запускається разом із `npm run worker` або сервісом `worker` у Compose після міграцій `bootstrap`. Реєстрація станції для збору графіків необов’язкова. Контейнер воркера потребує системного сокета D-Bus і доступу до `https://alerts.energy`. Воркер отримує короткочасний токен зі сторінки черги 4.1 на кожному опитуванні.
 
-Обидва маршрути повертають JSON з `Cache-Control: no-store` і використовують той самий Basic Auth, що й API станцій.
+Маршрути повертають JSON з `Cache-Control: no-store` і використовують той самий Basic Auth, що й API станцій.
 
 ```sh
 curl --user homarr 'https://power.example.com/api/v1/outages?queue=4.1'
+curl --user homarr 'https://power.example.com/api/v1/outages/overview?queue=4.1'
 curl --user homarr 'https://power.example.com/api/v1/outages/history?date=2026-11-11&queue=4.1'
 ```
 
 - `GET /api/v1/outages` повертає `area`, `operator` (об’єкт з `id` і `name`), `timeZone` (`Europe/Kyiv`), `schedules`, `lastSuccessfulPollAt` і `stale`. У `schedules` входять сьогоднішні й майбутні дати з останньої успішної відповіді джерела. До першого успіху список порожній, а `lastSuccessfulPollAt` і `stale` дорівнюють `null`. Через три хвилини без успішного опитування `stale` стає `true`.
+- `GET /api/v1/outages/overview` вимагає `queue` і повертає `today`, `tomorrow`, `days`, `timeZone`, `lastSuccessfulPollAt` і `stale`. У `days` є статус і зони за київським часом. Межі зон задані в хвилинах від 00:00. `charge` містить сьогоднішні виміри в `%`, координати зон і час у хвилинах від початку доби з урахуванням переведення годинника. За відсутності вимірів `charge` дорівнює `null`.
 - `GET /api/v1/outages/history` повертає `area`, `operator`, `timeZone`, запитану `date` та `versions` у порядку спостереження. `date` обов’язкова у форматі `YYYY-MM-DD`. Повторення того самого графіка згортаються. Послідовність A → B → A дає три версії.
-- `queue` необов’язковий в обох маршрутах. Без нього API повертає всі черги ДТЕК Київської області. Порожній результат повертається з `200`, некоректні параметри з `400`, неправильні або відсутні облікові дані з `401`, недоступність PostgreSQL або некоректна конфігурація Basic Auth з `503`.
+- У `/api/v1/outages` і `/api/v1/outages/history` параметр `queue` необов’язковий. Без нього API повертає всі черги ДТЕК Київської області. Порожній результат повертається з `200`, некоректні параметри з `400`, неправильні або відсутні облікові дані з `401`, недоступність PostgreSQL або некоректна конфігурація Basic Auth з `503`.
 
 Запис у `schedules` або `versions` має такий вигляд.
 

@@ -1,5 +1,6 @@
 import { authorizeApiRequest, json } from "../api.ts";
 import { createLogger, errorFields } from "../logger.ts";
+import { getOutageOverview } from "./overview.ts";
 import { isQueue, isScheduleDate } from "./schedules.ts";
 import { getCurrentOutages, getOutageHistory, outageSource } from "./service.ts";
 
@@ -24,6 +25,23 @@ export async function currentOutages(request: Request, read?: Parameters<typeof 
     return json(await getCurrentOutages(queue, now, read), 200);
   } catch (error) {
     log.error("Unable to read current outage schedules", { queue, ...errorFields(error) });
+    return json({ error: "service_unavailable" }, 503);
+  }
+}
+
+export async function outageOverview(request: Request, read = getOutageOverview, now = new Date()) {
+  const unauthorized = authorizeApiRequest(request);
+  if (unauthorized) return unauthorized;
+  const params = new URL(request.url).searchParams;
+  const queue = queueFilter(params);
+  if (!queue || [...params.keys()].some((key) => key !== "queue")) {
+    return json({ error: "invalid_parameters" }, 400);
+  }
+
+  try {
+    return json(await read(queue, now), 200);
+  } catch (error) {
+    log.error("Unable to read outage overview", { queue, ...errorFields(error) });
     return json({ error: "service_unavailable" }, 503);
   }
 }

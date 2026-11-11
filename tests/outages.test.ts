@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AlertsHttpError, fetchSchedules, parseSiteToken } from "../src/server/outages/client.ts";
-import { currentOutages, outageHistory } from "../src/server/outages/controller.ts";
+import { telemetryWindow } from "../src/lib/telemetry-history.ts";
+import { currentOutages, outageHistory, outageOverview } from "../src/server/outages/controller.ts";
+import { getOutageOverview } from "../src/server/outages/overview.ts";
 import { operator, parseSchedules } from "../src/server/outages/schedules.ts";
+import { outageSource } from "../src/server/outages/service.ts";
 
 const date = "2026-11-11";
 const hours = Array.from({ length: 24 }, (_, hour) => hour === 7 ? 2 : 0);
@@ -91,7 +94,7 @@ test("outage endpoints share Basic Auth and distinguish empty, stale and unavail
   const request = (suffix = "") => new Request(url + suffix, { headers: { Authorization: authorization } });
   const fail = async () => { throw new Error("Database unavailable"); };
 
-  for (const [route, controller] of [["", currentOutages], ["/history", outageHistory]] as const) {
+  for (const [route, controller] of [["", currentOutages], ["/history", outageHistory], ["/overview", outageOverview]] as const) {
     const unauthorized = await controller(new Request(url + route), fail);
     assert.equal(unauthorized.status, 401);
     assert.match(unauthorized.headers.get("WWW-Authenticate") ?? "", /^Basic /);
@@ -131,4 +134,60 @@ test("outage endpoints share Basic Auth and distinguish empty, stale and unavail
   assert.equal((await outageHistory(request("/history?date=2026-02-30"), fail)).status, 400);
   assert.equal((await outageHistory(request("/history"), fail)).status, 400);
   assert.equal((await outageHistory(request(suffix), fail)).status, 503);
+});
+
+test("outage overview aligns today's charge and zones across the Kyiv clock change", async (t) => {
+  t.mock.method(console, "error", () => {});
+  process.env.API_USERNAME = "homarr";
+  process.env.API_PASSWORD = "test-password";
+  const authorization = `Basic ${Buffer.from("homarr:test-password").toString("base64")}`;
+  const request = (query: string) => new Request("http://localhost/api/v1/outages/overview" + query, {
+    headers: { Authorization: authorization },
+  });
+  const today = "2026-03-29";
+  const now = new Date("2026-03-29T07:00:00Z");
+  const window = telemetryWindow({ from: today, to: today });
+  const schedule = {
+    queue: "4.1", date: today, observedAt: now, status: "ScheduleApplies", publishedSchedule: null,
+    hours: Array.from({ length: 24 }, (_, hour) => hour === 7 ? 2 : 0),
+    possible: Array.from({ length: 24 }, (_, hour) => hour === 8 ? 3 : 0),
+  } as const;
+  const readOutages = async (queue: string | null) => {
+    assert.equal(queue, "4.1");
+    return {
+      ...outageSource, lastSuccessfulPollAt: now, stale: false,
+      schedules: [
+        { ...schedule, hours: [...schedule.hours], possible: [...schedule.possible] },
+        { ...schedule, date: "2026-03-31", status: "NoShutdowns" as const, hours: [], possible: [] },
+      ],
+    };
+  };
+  const readCharge = async (requestedDate: string) => {
+    assert.equal(requestedDate, today);
+    return {
+      ...window,
+      samples: [355, 360, 385, 730].map((minute, index) => ({
+        time: window.start + minute * 60_000,
+        socPct: [30, 25, 0, 75][index], batteryPowerW: null, gridPowerW: null, backupLoadPowerW: null,
+      })),
+    };
+  };
+  const read: typeof getOutageOverview = (queue, time) => getOutageOverview(queue, time, readOutages, readCharge);
+  assert.equal((await outageOverview(request("?queue=4.1&queue=5.2"), read, now)).status, 400);
+  const response = await outageOverview(request("?queue=4.1"), read, now);
+  assert.equal(response.status, 200);
+  const overview = await response.json();
+  assert.deepEqual(overview.days.map(({ date }: { date: string }) => date), [today, "2026-03-30", "2026-03-31"]);
+  assert.deepEqual(overview.days[0].intervals.find(({ kind }: { kind: string }) => kind === "outage"),
+    { start: 420, end: 450, kind: "outage", range: "07:00–07:30" });
+  assert.equal(overview.days[1].intervals[0].kind, "unknown");
+  assert.equal(overview.charge.duration, 1380);
+  assert.deepEqual(overview.charge.bands.find(({ kind }: { kind: string }) => kind === "outage"),
+    { start: 360, end: 390, kind: "outage" });
+  assert.deepEqual(overview.charge.points.map(({ socPct }: { socPct: number | null }) => socPct), [30, 25, null, 0]);
+  assert.equal(overview.charge.last.time, "07:25");
+
+  const scheduleOnly = await getOutageOverview("4.1", now, readOutages, async () => { throw new Error("No telemetry"); });
+  assert.equal(scheduleOnly.days[0].status, "ScheduleApplies");
+  assert.equal(scheduleOnly.charge, null);
 });
