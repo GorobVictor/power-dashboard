@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
-import { clockTime, outageIntervals } from "../src/server/outages/intervals.ts";
+import { clockTime, outageIntervals, scheduleIntervals } from "../src/server/outages/intervals.ts";
 import { addTelemetrySample, shiftTelemetryDate, telemetryWindow } from "../src/lib/telemetry-history.ts";
 import {
   createDashboardSession,
@@ -55,6 +55,31 @@ test("outage intervals respect half-hour boundaries and merge only matching adja
   assert.deepEqual(outageIntervals([]), []);
   assert.equal(clockTime(90), "01:30");
   assert.equal(clockTime(1_440), "24:00");
+});
+
+test("expected power excludes planned and possible outages at half-hour boundaries", () => {
+  assert.deepEqual(scheduleIntervals({
+    status: "ScheduleApplies", hours: [2, 3, 9, ...Array<0>(21).fill(0)], possible: [0, 2, 1, 3],
+  }), [
+    { start: 0, end: 30, kind: "outage" },
+    { start: 30, end: 60, kind: "power" },
+    { start: 60, end: 90, kind: "possible" },
+    { start: 90, end: 180, kind: "outage" },
+    { start: 180, end: 210, kind: "power" },
+    { start: 210, end: 240, kind: "possible" },
+    { start: 240, end: 1_440, kind: "power" },
+  ]);
+});
+
+test("expected power requires a known schedule or a no-outages status", () => {
+  for (const status of ["WaitingForSchedule", "ScheduleApplies", "EmergencyShutdowns"] as const) {
+    assert.deepEqual(scheduleIntervals({ status, hours: [], possible: [] }), [
+      { start: 0, end: 1_440, kind: "unknown" },
+    ]);
+  }
+  assert.deepEqual(scheduleIntervals({ status: "NoShutdowns", hours: [], possible: [] }), [
+    { start: 0, end: 1_440, kind: "power" },
+  ]);
 });
 
 test("telemetry calendar windows follow Kyiv midnight across clock changes", () => {

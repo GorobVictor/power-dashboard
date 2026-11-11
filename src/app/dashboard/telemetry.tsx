@@ -1,7 +1,7 @@
 "use client";
 
 import { Activity } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { mobilePanelClassName, Timestamp } from "./panel";
 type Series = { key: Exclude<keyof TelemetrySample, "time">; label: string; color: string };
 
 const charge: Series[] = [{ key: "socPct", label: "Заряд", color: "var(--chart-charge)" }];
+const scheduleCharge: Series[] = [{ key: "socPct", label: "Заряд", color: "var(--schedule-charge)" }];
 const power: Series[] = [
   { key: "batteryPowerW", label: "Батарея", color: "var(--chart-charge)" },
   { key: "gridPowerW", label: "Мережа", color: "var(--chart-grid)" },
@@ -59,8 +60,15 @@ function chartPath(
   return path;
 }
 
-function HistoryChart({ title, unit, history, calendar, series }: {
+type ChartOverlay = { background: ReactNode; now: number; emptyMessage: string };
+
+export function ScheduleChargeChart({ history, overlay }: { history: TelemetryHistory; overlay: ChartOverlay }) {
+  return <HistoryChart title="Заряд і розряд" unit="%" history={history} calendar series={scheduleCharge} overlay={overlay} />;
+}
+
+function HistoryChart({ title, unit, history, calendar, series, overlay }: {
   title: string; unit: string; history: TelemetryHistory; calendar: boolean; series: Series[];
+  overlay?: ChartOverlay;
 }) {
   const label = useId();
   const instructions = useId();
@@ -88,6 +96,7 @@ function HistoryChart({ title, unit, history, calendar, series }: {
   );
 
   function selectFraction(fraction: number) {
+    if (available.length === 0) return;
     const time = start + fraction * duration;
     const nearest = available.reduce((closest, sample) =>
       Math.abs(sample.time - time) < Math.abs(closest.time - time) ? sample : closest,
@@ -100,7 +109,7 @@ function HistoryChart({ title, unit, history, calendar, series }: {
       <figcaption id={label} className="mb-2 flex items-baseline gap-2 text-sm font-semibold">
         {title}<span className="text-xs font-normal text-muted-foreground">{unit}</span>
       </figcaption>
-      {available.length === 0 ? (
+      {available.length === 0 && !overlay ? (
         <div className="grid h-43 place-items-center rounded-lg border border-dashed text-center text-sm text-muted-foreground sm:h-52 lg:h-44 xl:h-52">
           Немає показників за цей період
         </div>
@@ -114,7 +123,7 @@ function HistoryChart({ title, unit, history, calendar, series }: {
               ))}
             </div>
             <div
-              role="group" tabIndex={0} aria-labelledby={label} aria-describedby={instructions}
+              role="group" tabIndex={available.length ? 0 : undefined} aria-labelledby={label} aria-describedby={available.length ? instructions : undefined}
               className="relative h-34 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-40 lg:h-32 xl:h-40"
               onPointerMove={(event) => {
                 if (event.pointerType !== "mouse") return;
@@ -129,6 +138,7 @@ function HistoryChart({ title, unit, history, calendar, series }: {
               onPointerLeave={(event) => { if (event.pointerType === "mouse") setSelection(undefined); }}
               onBlur={() => setSelection(undefined)}
               onKeyDown={(event) => {
+                if (!available.length) return;
                 if (!["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) return;
                 event.preventDefault();
                 if (event.key === "Escape") {
@@ -141,7 +151,8 @@ function HistoryChart({ title, unit, history, calendar, series }: {
                 setSelection(Math.floor(available[next].time / bucket));
               }}
             >
-              <svg aria-hidden="true" className="h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
+              {overlay?.background}
+              <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
                 {plot.ticks.map((value) => (
                   <path key={value} d={`M0 ${plot.y(value)}H1000`} stroke="var(--border)" vectorEffect="non-scaling-stroke" />
                 ))}
@@ -150,6 +161,10 @@ function HistoryChart({ title, unit, history, calendar, series }: {
                     strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                 ))}
               </svg>
+              {overlay && overlay.now >= start && overlay.now < end && (
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-dashed border-foreground/70"
+                  style={{ left: `${plot.x(overlay.now) / 10}%` }} />
+              )}
               {active && (
                 <div className="pointer-events-none absolute inset-y-0 border-l border-dashed border-muted-foreground"
                   style={{ left: `${plot.x(active.time) / 10}%` }} aria-hidden="true">
@@ -170,20 +185,29 @@ function HistoryChart({ title, unit, history, calendar, series }: {
               ))}
             </div>
           </div>
-          <div className="mt-2 space-y-0.5 text-xs text-muted-foreground" aria-live="polite">
-            <ul className="flex flex-wrap gap-x-3 gap-y-1">
-              {series.map(({ key, color, label }) => (
-                <li key={key} className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color }} />
-                  {label}
-                  <span className="min-w-[4ch] font-semibold text-foreground tabular-nums">
-                    {active ? active[key] === null ? "—" : number.format(active[key]) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="min-h-4">{active && <Timestamp value={new Date(active.time)} />}</p>
-          </div>
+          {overlay && !available.length ? (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">{overlay.emptyMessage}</p>
+          ) : (
+            <div className="mt-2 space-y-0.5 text-xs text-muted-foreground" aria-live="polite">
+              <ul className="flex flex-wrap gap-x-3 gap-y-1">
+                {series.map(({ key, color, label }) => (
+                  <li key={key} className="flex items-center gap-1.5">
+                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+                    {label}
+                    <span className="min-w-[4ch] font-semibold text-foreground tabular-nums">
+                      {active ? active[key] === null ? "—" : number.format(active[key]) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="min-h-4">
+                {active && <Timestamp value={new Date(active.time)} />}
+                {overlay && active?.batteryPowerW != null && active.batteryPowerW !== 0 && (
+                  ` · ${active.batteryPowerW > 0 ? "Заряджається" : "Розряджається"}, ${number.format(Math.abs(active.batteryPowerW))} Вт`
+                )}
+              </p>
+            </div>
+          )}
         </>
       )}
     </figure>

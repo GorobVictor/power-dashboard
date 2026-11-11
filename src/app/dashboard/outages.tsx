@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, inputClassName } from "@/components/ui/input";
 import type { DashboardSchedule } from "@/lib/dashboard-feed";
+import { telemetryWindow, type TelemetryHistory } from "@/lib/telemetry-history";
 import { cn } from "@/lib/utils";
-import { clockTime, outageIntervals, outageQueues } from "@/server/outages/intervals";
+import { clockTime, outageIntervals, outageQueues, scheduleIntervals, type ScheduleInterval } from "@/server/outages/intervals";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
+import { ScheduleChargeChart } from "./telemetry";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, weekday: "long", day: "numeric", month: "long" });
 const kyivTime = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -24,6 +26,19 @@ const statuses = {
 const minutesPerDay = 24 * 60;
 const queueStorageKey = "power-dashboard.outage-queue";
 type Intervals = ReturnType<typeof outageIntervals>;
+type ChargeHistory = { history: TelemetryHistory; now: number; emptyMessage: string };
+
+const scheduleColors = {
+  power: { label: "Зі світлом", fill: "bg-[var(--schedule-power)]" },
+  outage: { label: "Без світла", fill: "bg-[var(--schedule-outage)]" },
+  possible: { label: "Можливе відключення", fill: "schedule-possible" },
+  unknown: { label: "Без даних", fill: "bg-[var(--schedule-unknown)]" },
+} as const;
+
+function kyivMinute(time: number) {
+  const [hour, minute] = kyivTime.format(time).split(":").map(Number);
+  return hour * 60 + minute;
+}
 
 function ScheduleDate({ value }: { value: string }) {
   return <time dateTime={value}>{dateFormat.format(new Date(`${value}T00:00:00Z`))}</time>;
@@ -37,7 +52,7 @@ function IntervalList({ intervals, possible = false }: { intervals: Intervals; p
       <ul className="flex flex-wrap gap-1.5">
         {intervals.map(({ start, end, kind }) => (
           <li key={start} className="tabular-nums">
-            <StatusBadge tone={kind === "emergency" ? "danger" : possible ? "muted" : "warning"} className="max-sm:px-1.5">
+            <StatusBadge tone={kind === "emergency" ? "danger" : "muted"} className="max-sm:px-1.5">
               {`${clockTime(start)}–${clockTime(end)}${kind === "emergency" ? " · Аварійні" : ""}`}
             </StatusBadge>
           </li>
@@ -47,21 +62,51 @@ function IntervalList({ intervals, possible = false }: { intervals: Intervals; p
   );
 }
 
-function ScheduleTimeline({ planned, possible, now }: { planned: Intervals; possible: Intervals; now?: number }) {
-  if (!planned.length && !possible.length) return null;
+function ScheduleBands({ intervals, day }: { intervals: ScheduleInterval[]; day?: TelemetryHistory }) {
+  const duration = day ? (day.end - day.start) / 60_000 : minutesPerDay;
+  let bands = intervals;
+  if (day && duration !== minutesPerDay) {
+    // The schedule uses Kyiv clock hours, while measurements use elapsed time.
+    bands = [];
+    for (let start = 0; start < duration; start += 30) {
+      const minute = kyivMinute(day.start + start * 60_000);
+      const kind = intervals.find((interval) => interval.start <= minute && minute < interval.end)?.kind ?? "unknown";
+      const previous = bands.at(-1);
+      if (previous?.kind === kind) previous.end = start + 30;
+      else bands.push({ start, end: start + 30, kind });
+    }
+  }
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm ring-1 ring-inset ring-border">
+      {bands.map(({ start, end, kind }) => (
+        <span key={start} className={cn("absolute inset-y-0", scheduleColors[kind].fill)}
+          style={{ left: `${start / duration * 100}%`, width: `${(end - start) / duration * 100}%` }} />
+      ))}
+    </div>
+  );
+}
+
+function ScheduleLegend({ intervals, showNow }: { intervals: ScheduleInterval[]; showNow: boolean }) {
+  return (
+    <ul aria-label="Позначення графіка відключень" className="flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] text-muted-foreground">
+      {(Object.keys(scheduleColors) as ScheduleInterval["kind"][]).filter((kind) => intervals.some((interval) => interval.kind === kind)).map((kind) => (
+        <li key={kind} className="flex items-center gap-1.5">
+          <span aria-hidden="true" className={cn("size-2.5 rounded-[2px] border", scheduleColors[kind].fill)} />
+          {scheduleColors[kind].label}
+        </li>
+      ))}
+      {showNow && <li className="flex items-center gap-1.5"><span aria-hidden="true" className="h-2.5 border-l border-dashed border-foreground" />Зараз</li>}
+    </ul>
+  );
+}
+
+function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; now?: number }) {
   return (
     <div className="space-y-1">
-      <div aria-hidden="true" className="relative h-3.5 rounded-md border bg-muted/65">
-        {planned.map(({ start, end, kind }) => (
-          <span key={start} className={cn("absolute inset-y-px rounded-[2px]", kind === "emergency" ? "bg-danger/80" : "bg-warning/65")}
-            style={{ left: `${start / minutesPerDay * 100}%`, width: `${(end - start) / minutesPerDay * 100}%` }} />
-        ))}
-        {possible.map(({ start, end, kind }) => (
-          <span key={start} className={cn("absolute inset-y-px rounded-[2px] border border-dashed", kind === "emergency" ? "border-danger" : "border-muted-foreground")}
-            style={{ left: `${start / minutesPerDay * 100}%`, width: `${(end - start) / minutesPerDay * 100}%` }} />
-        ))}
+      <div aria-hidden="true" className="relative h-4">
+        <ScheduleBands intervals={intervals} />
         {now !== undefined && (
-          <span className="absolute -inset-y-1 z-10 w-0.5 -translate-x-1/2 rounded-full bg-foreground ring-1 ring-card"
+          <span className="absolute inset-y-0 border-l border-dashed border-foreground"
             style={{ left: `${now / minutesPerDay * 100}%` }} />
         )}
       </div>
@@ -72,22 +117,43 @@ function ScheduleTimeline({ planned, possible, now }: { planned: Intervals; poss
   );
 }
 
-function ScheduleDetails({ schedule, now }: { schedule: ScheduleContent; now?: number }) {
-  const planned = outageIntervals(schedule.hours);
+function PowerIntervals({ intervals }: { intervals: ScheduleInterval[] }) {
+  const power = intervals.filter(({ kind }) => kind === "power");
+  if (!power.length) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">Години зі світлом за графіком</p>
+      <ul className="flex flex-wrap gap-1.5">
+        {power.map(({ start, end }) => (
+          <li key={start} className="tabular-nums">
+            <StatusBadge tone="warning" className="max-sm:px-1.5">{`${clockTime(start)}–${clockTime(end)}`}</StatusBadge>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const unknownSchedule: ScheduleContent = { status: "WaitingForSchedule", hours: [], possible: [], publishedSchedule: null };
+
+function ScheduleDetails({ schedule = unknownSchedule, now, charge }: { schedule?: ScheduleContent; now?: number; charge?: ChargeHistory }) {
+  const planned = schedule.status === "WaitingForSchedule" ? [] : outageIntervals(schedule.hours);
   const possible = outageIntervals(schedule.possible);
+  const intervals = scheduleIntervals(schedule);
   const interval = now !== undefined && schedule.status === "ScheduleApplies"
     ? planned.find(({ end }) => end > now) : undefined;
   const ongoing = interval && now !== undefined && interval.start <= now;
   const published = schedule.publishedSchedule;
-  if (!planned.length && !possible.length && !published) return null;
+  const showTimeline = intervals.some(({ kind }) => kind !== "unknown");
+  if (!charge && !showTimeline && !published) return null;
 
   return (
     <div className="dashboard-enter space-y-2.5">
       {now !== undefined && schedule.status === "ScheduleApplies" && planned.length > 0 && (
-        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 rounded-md bg-warning-surface/70 px-2.5 py-1.5 text-xs text-warning">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 rounded-md bg-muted px-2.5 py-1.5 text-xs text-foreground">
           {interval ? (
             <>
-              <span>{ongoing ? "Зараз за графіком" : "Наступне за графіком"}</span>
+              <span>{ongoing ? "Зараз відключення за графіком" : "Наступне відключення за графіком"}</span>
               <strong className="font-semibold tabular-nums">
                 {ongoing ? `до ${clockTime(interval.end)}` : `${clockTime(interval.start)}–${clockTime(interval.end)}`}
               </strong>
@@ -95,7 +161,11 @@ function ScheduleDetails({ schedule, now }: { schedule: ScheduleContent; now?: n
           ) : <span>На сьогодні інтервали завершились</span>}
         </div>
       )}
-      <ScheduleTimeline planned={planned} possible={possible} now={now} />
+      {charge ? <ScheduleChargeChart history={charge.history} overlay={{
+        now: charge.now, emptyMessage: charge.emptyMessage, background: <ScheduleBands intervals={intervals} day={charge.history} />,
+      }} /> : showTimeline && <ScheduleTimeline intervals={intervals} now={now} />}
+      {(charge || showTimeline) && <ScheduleLegend intervals={intervals} showNow={now !== undefined} />}
+      <PowerIntervals intervals={intervals} />
       <IntervalList intervals={planned} />
       <IntervalList intervals={possible} possible />
       {published && (
@@ -106,6 +176,7 @@ function ScheduleDetails({ schedule, now }: { schedule: ScheduleContent; now?: n
               <ScheduleDate value={published.date} />
               <ScheduleStatus status={published.status} />
             </div>
+            <PowerIntervals intervals={scheduleIntervals(published)} />
             <IntervalList intervals={outageIntervals(published.hours)} />
             <IntervalList intervals={outageIntervals(published.possible)} possible />
           </div>
@@ -179,13 +250,31 @@ function QueuePicker({ queue, queues, selectQueue }: QueueFilter) {
 }
 
 export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules: DashboardSchedule[] }) {
-  const { outages, outagesStale, today, now, connection } = useDashboardLive();
+  const { outages, outagesStale, today, now, connection, station, chargeHistory, historySupported, revision, request } = useDashboardLive();
   const { queue } = filter;
+  const configured = station?.kind === "station";
+  const showCharge = Boolean(queue && today);
+
+  useEffect(() => {
+    if (showCharge && configured && connection === "connected" && historySupported) {
+      request({ type: "chargeHistory", date: today });
+    }
+  }, [showCharge, configured, connection, historySupported, today, revision, request]);
 
   const visible = schedules.filter((schedule) => queue === null || schedule.queue === queue);
   const tomorrow = today ? new Date(Date.parse(today) + 86_400_000).toISOString().slice(0, 10) : "";
-  const [hour, minute] = kyivTime.format(now).split(":").map(Number);
-  const currentMinute = hour * 60 + minute;
+  const currentMinute = kyivMinute(now);
+  const response = chargeHistory?.date === today ? chargeHistory : undefined;
+  const charge = showCharge ? {
+    history: response?.value ?? { ...telemetryWindow({ from: today, to: today }), samples: [] },
+    now,
+    emptyMessage: station?.kind === "unconfigured" || station?.kind === "missing" ? "Історія з’явиться після налаштування станції."
+      : response?.value ? "За сьогодні ще немає вимірів заряду."
+      : response?.value === null ? "Не вдалося завантажити виміри заряду."
+      : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."
+      : connection === "connected" && !historySupported ? "Історія вимірів недоступна."
+      : "Завантажуємо виміри заряду…",
+  } : undefined;
   const stale = outagesStale || connection !== "connected";
   const checkedAt = outages?.lastSuccessfulPollAt;
   const status = checkedAt ? { label: stale ? "Застарілі дані" : "Джерело актуальне", tone: stale ? "warning" : "success" } as const
@@ -207,7 +296,16 @@ export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules
         <QueuePicker {...filter} />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2.5">
-        {!visible.length && (
+        {charge && !visible.some(({ date }) => date === today) && (
+          <article className="space-y-2.5 rounded-lg border bg-background/50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <CardTitle className="text-sm">Сьогодні</CardTitle>
+              <StatusBadge tone="muted">Графік недоступний</StatusBadge>
+            </div>
+            <ScheduleDetails now={currentMinute} charge={charge} />
+          </article>
+        )}
+        {!visible.length && !charge && (
           <p role="status" className="grid min-h-24 place-items-center rounded-lg border border-dashed p-3 text-center text-sm text-muted-foreground">
             {checkedAt ? "Немає актуальних графіків для цієї черги."
               : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."
@@ -230,7 +328,7 @@ export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules
                 </div>
                 <ScheduleStatus status={schedule.status} />
               </div>
-              <ScheduleDetails key={schedule.observedAt} schedule={schedule} now={isToday ? currentMinute : undefined} />
+              <ScheduleDetails schedule={schedule} now={isToday ? currentMinute : undefined} charge={isToday ? charge : undefined} />
             </article>
           );
         })}

@@ -22,11 +22,13 @@ type TelemetryRequest = { type: "telemetry" } & TelemetrySelection;
 
 export type DashboardRequest =
   | TelemetryRequest
+  | { type: "chargeHistory"; date: string }
   | { type: "outageHistory"; date: string; queue: string | null };
 
 export type DashboardMessage =
   | { type: "station"; value: DashboardStation }
   | { type: "outages"; value: DashboardOutages; schedulesChanged: boolean }
   | (TelemetryRequest & { value: TelemetryHistory | null })
+  | { type: "chargeHistory"; date: string; value: TelemetryHistory | null }
   | { type: "outageHistory"; date: string; queue: string | null; value: DashboardSchedule[] | null }
   | { type: "status"; connected: boolean; history?: true };

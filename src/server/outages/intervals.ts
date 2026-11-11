@@ -8,6 +8,7 @@ export function outageQueues(schedules: readonly { queue: string }[]) {
 
 type Kind = "planned" | "emergency";
 type Interval = { start: number; end: number; kind: Kind };
+export type ScheduleInterval = { start: number; end: number; kind: "power" | "outage" | "possible" | "unknown" };
 
 export function outageIntervals(hours: ScheduleContent["hours"]): Interval[] {
   const intervals: Interval[] = [];
@@ -22,6 +23,22 @@ export function outageIntervals(hours: ScheduleContent["hours"]): Interval[] {
     } else {
       intervals.push({ start, end, kind });
     }
+  }
+  return intervals;
+}
+
+export function scheduleIntervals({ status, hours, possible }: Pick<ScheduleContent, "status" | "hours" | "possible">) {
+  const outages = outageIntervals(hours);
+  const risks = outageIntervals(possible);
+  const hasPlan = status === "NoShutdowns" || (status === "ScheduleApplies" && hours.length === 24);
+  const intervals: ScheduleInterval[] = [];
+  for (let start = 0; start < 24 * 60; start += 30) {
+    const outage = status !== "WaitingForSchedule" && outages.some((interval) => interval.start <= start && start < interval.end);
+    const risk = risks.some((interval) => interval.start <= start && start < interval.end);
+    const kind = outage ? "outage" : risk ? "possible" : hasPlan ? "power" : "unknown";
+    const previous = intervals.at(-1);
+    if (previous?.kind === kind) previous.end = start + 30;
+    else intervals.push({ start, end: start + 30, kind });
   }
   return intervals;
 }

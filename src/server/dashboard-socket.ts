@@ -37,32 +37,39 @@ function parseRequest(data: string): DashboardRequest | null {
       return { type: "telemetry", period: "dates", from: request.from, to: request.to };
     }
   }
+  if (request?.type === "chargeHistory" && isScheduleDate(request.date)) {
+    return { type: "chargeHistory", date: request.date };
+  }
   if (request?.type === "outageHistory" && isScheduleDate(request.date) && (request.queue === null || isQueue(request.queue))) {
     return { type: "outageHistory", date: request.date, queue: request.queue };
   }
   return null;
 }
 
+type HistoryRequest = Extract<DashboardRequest, { type: "telemetry" | "chargeHistory" }>;
+
 type SocketClient = {
   alive: boolean;
   pending: Map<DashboardRequest["type"], DashboardRequest>;
-  telemetrySamples?: TelemetrySample[];
+  telemetrySamples: Map<HistoryRequest["type"], TelemetrySample[]>;
 };
 
 async function loadHistory(request: DashboardRequest, client: SocketClient): Promise<DashboardMessage> {
   try {
-    if (request.type === "telemetry") {
+    if (request.type === "telemetry" || request.type === "chargeHistory") {
       const stationId = process.env.STATION_ID?.trim();
-      const period = request.period === "dates" ? request : request.period;
+      const period = request.type === "chargeHistory" ? { from: request.date, to: request.date }
+        : request.period === "dates" ? request : request.period;
       if (!stationId) return { ...request, value: { ...telemetryWindow(period), samples: [] } };
       const samples: TelemetrySample[] = [];
-      client.telemetrySamples = samples;
+      client.telemetrySamples.set(request.type, samples);
       try {
         const history = await findTelemetryHistory(database(), stationId, period);
-        const value = samples.reduce((result, sample) => addTelemetrySample(result, request.period, sample), history);
+        const selection = typeof period === "string" ? period : "dates";
+        const value = samples.reduce((result, sample) => addTelemetrySample(result, selection, sample), history);
         return { ...request, value };
       } finally {
-        delete client.telemetrySamples;
+        client.telemetrySamples.delete(request.type);
       }
     }
     const versions = await getOutageHistory(request.date, request.queue);
@@ -90,7 +97,7 @@ export function attachDashboardSocket(server: Server) {
     const sample = message.type === "station" && message.value.kind === "station" && message.value.measurement
       ? telemetrySample(message.value.measurement) : null;
     for (const [ws, client] of clients) {
-      if (sample) client.telemetrySamples?.push(sample);
+      if (sample) for (const samples of client.telemetrySamples.values()) samples.push(sample);
       send(ws, data);
     }
   }
@@ -136,7 +143,7 @@ export function attachDashboardSocket(server: Server) {
           ws.close(dashboardSessionExpired);
           return;
         }
-        const client: SocketClient = { alive: true, pending: new Map() };
+        const client: SocketClient = { alive: true, pending: new Map(), telemetrySamples: new Map() };
         ws.on("message", (data, isBinary) => {
           const request = isBinary ? null : parseRequest(data.toString());
           if (!request) ws.close(1008);

@@ -18,6 +18,7 @@ type DashboardLiveState = {
   revision: number;
   schedulesRevision: number;
   telemetry: Extract<DashboardMessage, { type: "telemetry" }> | undefined;
+  chargeHistory: Extract<DashboardMessage, { type: "chargeHistory" }> | undefined;
   outageHistory: Extract<DashboardMessage, { type: "outageHistory" }> | undefined;
   request: (request: DashboardRequest) => void;
 };
@@ -29,6 +30,7 @@ export function DashboardLive({ children }: { children: ReactNode }) {
   const [station, setStation] = useState<DashboardStation>();
   const [outages, setOutages] = useState<DashboardOutages>();
   const [telemetry, setTelemetry] = useState<DashboardLiveState["telemetry"]>();
+  const [chargeHistory, setChargeHistory] = useState<DashboardLiveState["chargeHistory"]>();
   const [outageHistory, setOutageHistory] = useState<DashboardLiveState["outageHistory"]>();
   const [connection, setConnection] = useState<Connection>("connecting");
   const [historySupported, setHistorySupported] = useState(false);
@@ -65,6 +67,11 @@ export function DashboardLive({ children }: { children: ReactNode }) {
                 const value = addTelemetrySample(history.value, history.period, sample);
                 return value === history.value ? history : { ...history, value };
               });
+              setChargeHistory((history) => {
+                if (!history?.value) return history;
+                const value = addTelemetrySample(history.value, "dates", sample);
+                return value === history.value ? history : { ...history, value };
+              });
             }
             break;
           }
@@ -73,6 +80,7 @@ export function DashboardLive({ children }: { children: ReactNode }) {
             if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
             break;
           case "telemetry": setTelemetry(message); break;
+          case "chargeHistory": setChargeHistory(message); break;
           case "outageHistory": setOutageHistory(message); break;
           case "status":
             setConnection(message.connected ? "connected" : "disconnected");
@@ -125,7 +133,7 @@ export function DashboardLive({ children }: { children: ReactNode }) {
     <DashboardContext.Provider value={{
       connection, station, stationStale: now >= stationExpires, outages, outagesStale: now >= outagesExpire,
       today: now ? kyivDate(new Date(now)) : "", now,
-      historySupported, revision, schedulesRevision, telemetry, outageHistory, request,
+      historySupported, revision, schedulesRevision, telemetry, chargeHistory, outageHistory, request,
     }}>
       {children}
     </DashboardContext.Provider>
