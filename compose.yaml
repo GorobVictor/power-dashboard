@@ -54,6 +54,7 @@ services:
       - "${API_PORT:-4000}:3000"
     environment:
       <<: *database-env
+      OUTAGE_SOURCE: ${OUTAGE_SOURCE:-alerts.energy}
       API_USERNAME: ${API_USERNAME:?Set API_USERNAME in .env}
       API_PASSWORD: ${API_PASSWORD:?Set API_PASSWORD in .env}
       DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-}
@@ -66,6 +67,16 @@ services:
     restart: unless-stopped
     networks:
       - default
+
+  selenium:
+    profiles: [dtek]
+    image: selenium/standalone-chromium:4.52.0-20261101
+    shm_size: 2gb
+    ports:
+      - "${DTEK_BROWSER_PORT:-7900}:7900"
+    environment:
+      SE_NODE_SESSION_TIMEOUT: "86400"
+    restart: unless-stopped
 
   worker:
     image: ${COMPOSE_PROJECT_NAME:-power-dashboard}-worker:local
@@ -85,6 +96,9 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_LOW_BATTERY_PCT: ${TELEGRAM_LOW_BATTERY_PCT:-20}
       TELEGRAM_DTEK_QUEUE: ${TELEGRAM_DTEK_QUEUE:-}
+      OUTAGE_SOURCE: ${OUTAGE_SOURCE:-alerts.energy}
+      DTEK_WEBDRIVER_URL: http://selenium:4444
+      DTEK_BROWSER_URL: ${DTEK_BROWSER_URL:-}
     volumes:
       - type: bind
         source: /run/dbus/system_bus_socket

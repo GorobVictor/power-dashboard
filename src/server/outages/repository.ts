@@ -2,14 +2,24 @@ import type { Client, Pool } from "pg";
 import { area, operator } from "./schedules.ts";
 import type { Schedule, ScheduleVersion } from "./schedules.ts";
 
-export const outageSourceId = `alerts.energy:${area}:${operator.id}`;
+export function outageSourceName() {
+  const source = process.env.OUTAGE_SOURCE || "alerts.energy";
+  if (source !== "alerts.energy" && source !== "dtek") {
+    throw new Error("OUTAGE_SOURCE must be alerts.energy or dtek");
+  }
+  return source;
+}
+
+export function outageSourceId() {
+  return `${outageSourceName()}:${area}:${operator.id}`;
+}
 
 type ScheduleChange = Schedule & { previousContent: Schedule["content"] | null };
 
 export async function lockOutageSource(db: Client): Promise<boolean> {
   const { rows } = await db.query<{ acquired: boolean }>(
     "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
-    [outageSourceId],
+    [outageSourceId()],
   );
   return rows[0].acquired;
 }
@@ -43,7 +53,7 @@ export async function saveOutagePoll(db: Client, schedules: Schedule[], observed
      )
      SELECT queue, to_char(date, 'YYYY-MM-DD') AS date, content, previous_content AS "previousContent"
      FROM compared WHERE changed ORDER BY compared.date, queue`,
-    [outageSourceId, JSON.stringify(schedules), observedAt],
+    [outageSourceId(), JSON.stringify(schedules), observedAt],
   );
   return rows;
 }
@@ -67,7 +77,7 @@ export async function findCurrentSchedules(db: Pool | Client, from: string, queu
        AND v.schedule_date >= $2::date AND ($3::text IS NULL OR v.queue = $3)
      WHERE state.source = $1
      ORDER BY v.schedule_date, v.queue`,
-    [outageSourceId, from, queue],
+    [outageSourceId(), from, queue],
   );
 
   return {

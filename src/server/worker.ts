@@ -3,6 +3,8 @@ import { positiveInteger, telegramFromEnvironment } from "./config.ts";
 import { databaseClient } from "./db.ts";
 import { createLogger, errorFields, errorMessage } from "./logger.ts";
 import { collectOutageSchedules } from "./outages/collector.ts";
+import { collectDtekSchedules } from "./outages/dtek-collector.ts";
+import { outageSourceName } from "./outages/repository.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
 import type { BatteryNotificationOptions } from "./telegram/battery.ts";
@@ -64,7 +66,9 @@ try {
 
 const collectors = [
   runMarstek(shutdown.signal, telegram ?? undefined),
-  collectOutageSchedules(shutdown.signal, telegram?.outageQueue),
+  outageSourceName() === "dtek"
+    ? collectDtekSchedules(shutdown.signal, telegram?.outageQueue, !!telegram)
+    : collectOutageSchedules(shutdown.signal, telegram?.outageQueue),
 ];
 if (telegram) collectors.push(deliverTelegramNotifications(telegram, shutdown.signal));
 try {

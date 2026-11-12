@@ -72,7 +72,7 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
         }
         updates = updates.then(async () => {
           if (lost.signal.aborted || signal.aborted) return;
-          if (update?.type === "outages" && update.source === outageSourceId) {
+          if (update?.type === "outages" && update.source === outageSourceId()) {
             const observedAt = Date.parse(update.lastSuccessfulPollAt);
             if (!Number.isFinite(observedAt)) return;
             if (!outages || update.schedulesChanged) {
