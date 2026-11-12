@@ -1,3 +1,4 @@
+import { createLogger } from "../logger.ts";
 import { kyivDate, type Schedule } from "./schedules.ts";
 
 export class DtekError extends Error {
@@ -27,7 +28,10 @@ export function parseDtekFact(value: unknown): Schedule[] {
   return result;
 }
 
+const log = createLogger("worker.outages.browser");
+
 export class DtekBrowser {
+  stage = "browser.session";
   private session: string | null = null;
   private awaitingChallenge = false;
   private readonly endpoint: string;
@@ -44,23 +48,31 @@ export class DtekBrowser {
   }
   async poll() {
     if (!this.session) {
+      this.stage = "browser.session";
       const session = await this.command("/session", { capabilities: { alwaysMatch: { browserName: "chrome" } } });
       this.session = session.sessionId;
+      log.info("Selenium browser session created");
     }
     const base = `/session/${this.session}`;
     try {
+      this.stage = "browser.navigate";
       if (!this.awaitingChallenge) await this.command(`${base}/url`, { url: "https://www.dtek-krem.com.ua/ua/shutdowns" });
+      this.stage = "browser.read";
       const result = await this.command(`${base}/execute/sync`, { script: "return {fact: window.DisconSchedule?.fact ?? null, challenge: !!document.querySelector('iframe[src*=hcaptcha], iframe[title*=challenge]') || (document.body?.innerText ?? '').includes('Additional security check is required')};", args: [] });
       if (!result.fact && result.challenge) {
         this.awaitingChallenge = true;
         return { challenge: true as const };
       }
       if (!result.fact) throw new DtekError("DTEK page does not contain DisconSchedule.fact");
+      this.stage = "source.parse";
       const schedules = parseDtekFact(result.fact);
       this.awaitingChallenge = false;
       return { challenge: false as const, schedules };
     } catch (error) {
-      if (error instanceof Error && /invalid session|no such window/i.test(error.message)) this.session = null;
+      if (error instanceof Error && /invalid session|no such window/i.test(error.message)) {
+        this.session = null;
+        log.warn("Selenium browser session ended; a new session will be created");
+      }
       throw error;
     }
   }

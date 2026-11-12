@@ -13,6 +13,8 @@ const log = createLogger("worker.outages");
 export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?: string, telegramEnabled = false) {
   const browser = new DtekBrowser(process.env.DTEK_WEBDRIVER_URL || "http://selenium:4444");
   let challengeNotified = false;
+  let challengeActive = false;
+  let failedPolls = 0;
   let nextPoll = performance.now();
   let waitingForLock = false;
 
@@ -32,7 +34,7 @@ export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?
       if (await lockOutageSource(db)) {
         waitingForLock = false;
         connectionStage = "database.connection";
-        log.info("Starting DTEK polling", { pollIntervalMs: intervalMs });
+        log.info("Starting DTEK polling", { pollIntervalMs: intervalMs, telegramEnabled, browserLinkConfigured: Boolean(process.env.DTEK_BROWSER_URL) });
         while (!signal.aborted) {
           while (nextPoll > performance.now()) {
             await delay(Math.min(nextPoll - performance.now(), 2_147_483_647), undefined, { signal });
@@ -44,15 +46,26 @@ export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?
           try {
             const result = await browser.poll();
             if (result.challenge) {
+              if (!challengeActive) {
+                challengeActive = true;
+                log.warn("DTEK requires CAPTCHA; waiting for manual verification", { telegramEnabled });
+              }
               if (!challengeNotified && telegramEnabled) {
                 const url = process.env.DTEK_BROWSER_URL;
                 if (url) {
+                  stage = "telegram.enqueue";
                   await enqueueTelegramMessages(db, [`Потрібно пройти перевірку ДТЕК: ${escapeMarkdown(url)}`]);
                   challengeNotified = true;
-                } else log.warn("Set DTEK_BROWSER_URL to send a CAPTCHA link");
+                  log.info("CAPTCHA notification queued for Telegram");
+                } else if (!challengeNotified) {
+                  log.warn("Set DTEK_BROWSER_URL to send a CAPTCHA link");
+                  challengeNotified = true;
+                }
               }
               continue;
             }
+            if (challengeActive) log.info("CAPTCHA cleared; DTEK schedule is available");
+            challengeActive = false;
             challengeNotified = false;
             const schedules = result.schedules;
             signal.throwIfAborted();
@@ -61,14 +74,19 @@ export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?
             const changes = telegramQueue
               ? await saveOutagePollWithTelegram(db, schedules, observedAt, telegramQueue)
               : await saveOutagePoll(db, schedules, observedAt);
+            if (failedPolls) log.info("DTEK polling recovered", { failedPolls });
+            failedPolls = 0;
             log.info("Saved DTEK poll", {
               schedules: schedules.length, changed: changes.length,
               durationMs: Math.round(performance.now() - startedAt),
             });
           } catch (error) {
             if (signal.aborted) break;
+            failedPolls++;
             log.warn("DTEK poll failed", {
-              stage,
+              stage: stage === "source.fetch" ? browser.stage : stage,
+              failedPolls,
+              durationMs: Math.round(performance.now() - startedAt),
               ...errorFields(error),
               reason: error instanceof DtekError ? error.message : undefined,
               retryInMs: Math.max(0, Math.ceil(nextPoll - performance.now())),

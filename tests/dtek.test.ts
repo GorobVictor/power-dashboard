@@ -46,3 +46,19 @@ test("reports missing data and safe WebDriver errors", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("identifies the failing browser command without exposing its response", async () => {
+  const { DtekBrowser } = await import("../src/server/outages/dtek.ts");
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => ++calls === 1
+      ? Response.json({ value: { sessionId: "private-session" } })
+      : Response.json({ value: { error: "timeout", message: "private details" } }, { status: 500 });
+    const browser = new DtekBrowser("http://selenium");
+    await assert.rejects(browser.poll(), /WebDriver: timeout/);
+    assert.equal(browser.stage, "browser.navigate");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
