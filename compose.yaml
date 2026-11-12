@@ -4,6 +4,7 @@ x-database-env: &database-env
   PGDATABASE: power_dashboard
   PGUSER: power_dashboard
   PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+  LOG_FORMAT: ${LOG_FORMAT:-text}
 
 name: power-dashboard
 

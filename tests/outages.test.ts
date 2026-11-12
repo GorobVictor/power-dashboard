@@ -27,6 +27,8 @@ test("reads a fresh page token and sends it only to the regional endpoint", asyn
     paths.push(url.pathname);
     assert.equal(url.origin, "https://alerts.energy");
     assert.ok(init?.signal);
+    assert.equal(headers.get("User-Agent"),
+      "Mozilla/5.0 (Linux; Android 14; SM-A556B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Mobile Safari/537.36");
 
     if (paths.length === 1) {
       assert.equal(headers.get("x-request-hash"), null);
@@ -34,11 +36,12 @@ test("reads a fresh page token and sends it only to the regional endpoint", asyn
     }
 
     assert.equal(headers.get("x-request-hash"), "test-token");
+    assert.equal(headers.get("Referer"), "https://alerts.energy/kyivska-oblast/schedule/kyivska-oblast-oblenergo/4.1");
     assert.equal(init?.redirect, "error");
     return Response.json([row]);
   });
   assert.deepEqual(paths, [
-    "/kyivska-oblast/schedule/kyivska_oblast_oblenergo/4.1",
+    "/kyivska-oblast/schedule/kyivska-oblast-oblenergo/4.1",
     "/api/v1/source-registry/areas/kyivska-oblast/shutdowns",
   ]);
   assert.equal(schedules[0].date, date);

@@ -1,8 +1,11 @@
-import { AlertsSourceError, area, operator, parseSchedules } from "./schedules.ts";
+import { createLogger, errorFields } from "../logger.ts";
+import { AlertsSourceError, area, parseSchedules } from "./schedules.ts";
 
-const siteUrl = new URL(`https://alerts.energy/${area}/schedule/${operator.id}/4.1`);
+const siteUrl = new URL(`https://alerts.energy/${area}/schedule/kyivska-oblast-oblenergo/4.1`);
 const shutdownsUrl = new URL(`/api/v1/source-registry/areas/${area}/shutdowns`, siteUrl);
+const userAgent = "Mozilla/5.0 (Linux; Android 14; SM-A556B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Mobile Safari/537.36";
 const timeoutMs = 10_000;
+const log = createLogger("worker.outages");
 
 export class AlertsHttpError extends AlertsSourceError {
   readonly retryAfterMs: number;
@@ -36,7 +39,20 @@ export function parseSiteToken(html: string, now = Date.now()): string {
 
 async function get(url: URL, options: RequestInit, shutdown: AbortSignal, request: typeof fetch) {
   const signal = AbortSignal.any([shutdown, AbortSignal.timeout(timeoutMs)]);
-  const response = await request(url, { ...options, signal, cache: "no-store" });
+  const headers = new Headers(options.headers);
+  headers.set("User-Agent", userAgent);
+  const startedAt = performance.now();
+  const response = await request(url, { ...options, headers, signal, cache: "no-store" }).catch((error: unknown) => {
+    if (!shutdown.aborted) {
+      log.warn("alerts.energy request failed before receiving a response", {
+        path: url.pathname, durationMs: Math.round(performance.now() - startedAt), ...errorFields(error),
+      });
+    }
+    throw error;
+  });
+  log.info("Received alerts.energy response", {
+    path: url.pathname, statusCode: response.status, durationMs: Math.round(performance.now() - startedAt),
+  });
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
     throw new AlertsHttpError(response.status, response.headers.get("Retry-After"));

@@ -117,7 +117,7 @@ function scheduleMessage(
 export async function saveOutagePollWithTelegram(
   db: Client, schedules: Schedule[], observedAt: Date, selectedQueue: string,
 ) {
-  await inTransaction(db, async () => {
+  return inTransaction(db, async () => {
     const changes = await saveOutagePoll(db, schedules, observedAt);
     const today = kyivDate(observedAt);
     const messages: string[] = [];
@@ -129,5 +129,6 @@ export async function saveOutagePollWithTelegram(
       messages.push(scheduleMessage(change, previousContent, wasPublished));
     }
     await enqueueTelegramMessages(db, messages);
+    return changes;
   });
 }
