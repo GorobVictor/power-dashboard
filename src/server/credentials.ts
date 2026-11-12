@@ -17,3 +17,10 @@ export function matchesCredentials(username: string, password: string, expected:
   const validPassword = sameSecret(password, expected.password);
   return validUsername && validPassword;
 }
+
+export function matchesDashboardCredentials(username: string, password: string, expected: Credentials) {
+  return matchesCredentials(username.toLowerCase(), password, {
+    ...expected,
+    username: expected.username.toLowerCase(),
+  });
+}

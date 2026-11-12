@@ -3,12 +3,21 @@ import test from "node:test";
 import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
 import { clockTime, outageIntervals, scheduleIntervals } from "../src/server/outages/intervals.ts";
 import { addTelemetrySample, shiftTelemetryDate, telemetryWindow } from "../src/lib/telemetry-history.ts";
+import { matchesCredentials, matchesDashboardCredentials } from "../src/server/credentials.ts";
 import {
   createDashboardSession,
   dashboardAuthConfig,
   isDashboardSessionValid,
   sessionCookieOptions,
 } from "../src/server/dashboard-session.ts";
+
+test("dashboard login ignores username case while passwords and API credentials remain case-sensitive", () => {
+  const credentials = { username: "User@Example.com", password: "Secret" };
+  assert.equal(matchesDashboardCredentials("USER@example.COM", "Secret", credentials), true);
+  assert.equal(matchesDashboardCredentials("user@example.com", "secret", credentials), false);
+  assert.equal(matchesDashboardCredentials("other@example.com", "Secret", credentials), false);
+  assert.equal(matchesCredentials("user@example.com", "Secret", credentials), false);
+});
 
 test("dashboard sessions expire, reject tampering, and follow credential rotation", async () => {
   process.env.API_USERNAME = "dashboard";

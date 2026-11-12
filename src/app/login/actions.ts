@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { matchesCredentials } from "@/server/credentials";
+import { matchesDashboardCredentials } from "@/server/credentials";
 import {
   createDashboardSession,
   dashboardAuthConfig,
@@ -17,7 +17,7 @@ export async function signIn(_previous: string | null, form: FormData) {
   const username = form.get("username");
   const password = form.get("password");
   if (typeof username !== "string" || typeof password !== "string" ||
-      !matchesCredentials(username, password, config.credentials)) {
+      !matchesDashboardCredentials(username, password, config.credentials)) {
     return "Неправильний логін або пароль.";
   }
 
