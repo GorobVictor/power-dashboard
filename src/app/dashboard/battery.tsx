@@ -3,6 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DetailSummary } from "./detail-summary";
 import { useDashboardLive } from "./live";
@@ -34,14 +35,15 @@ function Metric({ label, children }: { label: string; children: ReactNode }) {
 export function BatteryPanel({ className }: { className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
-  const { station } = useDashboardLive();
+  const { station, connection } = useDashboardLive();
+  const loading = !station && connection === "connecting";
   const measurement = station?.kind === "station" ? station.measurement : null;
   const workMode = measurement?.workMode === 1 && measurement.upsEnabled !== false
     ? measurement.upsEnabled ? "UPS" : "Ручний / UPS · невідомо"
     : mode(measurement?.workMode ?? null, workModes);
 
   return (
-    <Card id="station-details" className={cn("min-w-0 gap-0 py-0 lg:pt-4", className, !measurement && "max-lg:hidden")}>
+    <Card id="station-details" className={cn("min-w-0 gap-0 py-0 lg:pt-4", className, !measurement && !loading && "max-lg:hidden")}>
       <CardHeader className="hidden pb-3 lg:grid">
         <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           <span className="grid size-8 place-items-center rounded-lg bg-success-surface text-success">
@@ -50,9 +52,9 @@ export function BatteryPanel({ className }: { className?: string }) {
           Деталі станції
         </h2>
       </CardHeader>
-      <DetailSummary expanded={expanded} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
+      {loading ? <div aria-hidden="true" className="flex min-h-12 items-center justify-between px-4 py-3 sm:px-5 lg:hidden"><Skeleton className="h-4 w-36" /><Skeleton className="size-4" /></div> : <DetailSummary expanded={expanded} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         <SlidersHorizontal aria-hidden="true" className="size-4 text-success" /> Деталі станції
-      </DetailSummary>
+      </DetailSummary>}
       <div id={contentId} className={cn(
         "grid lg:visible lg:grid-rows-[1fr] max-lg:motion-safe:transition-[grid-template-rows,visibility] max-lg:motion-safe:duration-200",
         expanded ? "grid-rows-[1fr]" : "invisible grid-rows-[0fr]",
