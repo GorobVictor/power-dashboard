@@ -9,6 +9,7 @@ interface ByteConnection {
 }
 
 export interface BleConnection extends ByteConnection {
+  diagnose?(): Promise<void>;
   close(): Promise<void>;
 }
 

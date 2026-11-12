@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import dbus, { type Message, type MessageBus, type MessageLike, type Variant } from "dbus-next";
+import { createLogger, errorFields, errorMessage } from "../logger.ts";
 import { abortable } from "./abort.ts";
 import { requestFrame, type ConnectStation } from "./client.ts";
 import { DEVICE_INFO, verifyDevice } from "./protocol.ts";
@@ -12,6 +13,7 @@ const CHARACTERISTIC = "org.bluez.GattCharacteristic1";
 const DBUS = "org.freedesktop.DBus";
 const PROPERTIES = `${DBUS}.Properties`;
 const uuid = (short: string) => `0000${short}-0000-1000-8000-00805f9b34fb`;
+const log = createLogger("worker.marstek");
 
 type Properties = Record<string, Variant<unknown>>;
 type ManagedObjects = Record<string, Record<string, Properties>>;
@@ -25,8 +27,9 @@ export class BluezConnection {
   private notify = "";
   private writePath = "";
   private writeType: "request" | "command" = "request";
+  stage = "bus.owner";
 
-  constructor() {
+  constructor(private readonly stationId: string) {
     this.bus.on("error", (error: Error) => this.disconnected.abort(error));
     this.bus.on("message", this.onDeviceSignal);
   }
@@ -107,18 +110,22 @@ export class BluezConnection {
       member: "GetNameOwner", signature: "s", body: [BLUEZ],
     }, signal);
     this.owner = name?.body[0] as string;
+    this.stage = "device.discovery";
     this.device = await this.discover(`/org/bluez/${adapterName}`, address, signal);
+    this.stage = "device.subscribe";
     const device = (await this.objects(signal))[this.device]?.[DEVICE];
     await this.call({
       destination: DBUS, path: "/org/freedesktop/DBus", interface: DBUS, member: "AddMatch",
       signature: "s",
       body: [`type='signal',sender='${BLUEZ}',interface='${PROPERTIES}',member='PropertiesChanged',path_namespace='${this.device}'`],
     }, signal);
+    this.stage = "device.connect";
     if (device?.Connected?.value !== true) {
       this.connectedHere = true;
       await this.call({ path: this.device, interface: DEVICE, member: "Connect" }, signal);
     }
 
+    this.stage = "services.resolve";
     let objects = await this.objects(signal);
     while (objects[this.device]?.[DEVICE]?.ServicesResolved?.value !== true) {
       await delay(250, undefined, { signal });
@@ -144,7 +151,29 @@ export class BluezConnection {
     }
     this.writePath = write;
     this.notify = notify;
+    this.stage = "notifications.start";
     await this.call({ path: notify, interface: CHARACTERISTIC, member: "StartNotify" }, signal);
+    this.stage = "device.verify";
+  }
+
+  async diagnose() {
+    try {
+      const objects = await this.objects(AbortSignal.timeout(1_000));
+      const device = objects[this.device]?.[DEVICE];
+      const notify = objects[this.notify]?.[CHARACTERISTIC];
+      log.info("BLE connection state", {
+        stationId: this.stationId,
+        connected: typeof device?.Connected?.value === "boolean" ? device.Connected.value : null,
+        servicesResolved: typeof device?.ServicesResolved?.value === "boolean" ? device.ServicesResolved.value : null,
+        notifying: typeof notify?.Notifying?.value === "boolean" ? notify.Notifying.value : null,
+        writeType: this.writeType,
+        connectionAborted: this.signal.aborted,
+      });
+    } catch (error) {
+      log.warn("Unable to inspect BLE connection", {
+        stationId: this.stationId, ...errorFields(error), reason: errorMessage(error),
+      });
+    }
   }
 
   onBytes(receive: (bytes: Buffer) => void) {
@@ -187,12 +216,19 @@ export class BluezConnection {
 export function bluezConnector(adapter: string): ConnectStation {
   if (!/^hci\d+$/.test(adapter)) throw new Error("BLE_ADAPTER must be an adapter name such as hci0");
   return async (station, signal) => {
-    const connection = new BluezConnection();
+    const connection = new BluezConnection(station.id);
     try {
       await connection.open(adapter, station.bleMac, signal);
       verifyDevice(await requestFrame(connection, DEVICE_INFO, signal), station);
       return connection;
     } catch (error) {
+      if (!signal.aborted) {
+        log.warn("BLE connection setup failed", {
+          stationId: station.id, setupStage: connection.stage,
+          ...errorFields(error), reason: errorMessage(error),
+        });
+        await connection.diagnose();
+      }
       await connection.close();
       throw error;
     }

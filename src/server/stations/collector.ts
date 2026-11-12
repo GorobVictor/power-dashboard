@@ -60,8 +60,12 @@ async function collectWithLock(
           stage = "ble.readUps";
           try {
             upsEnabled = decodeUpsEnabled(await requestFrame(connection, GET_WORK_MODE_SETTINGS, session));
-          } catch {
+          } catch (error) {
             session.throwIfAborted();
+            log.warn("BLE settings read failed", {
+              stationId: station.id, stage: "ble.readUps", ...errorFields(error), reason: errorMessage(error),
+            });
+            await connection.diagnose?.();
             // A failed settings read should not discard the telemetry sample.
             upsEnabled = null;
           }
@@ -86,6 +90,9 @@ async function collectWithLock(
         stage = "ble.wait";
         await delay(Math.max(0, nextAt - now), undefined, { signal: session });
       }
+    } catch (error) {
+      if (!signal.aborted && stage.startsWith("ble.")) await connection.diagnose?.();
+      throw error;
     } finally {
       await connection.close();
     }
