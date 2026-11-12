@@ -88,3 +88,44 @@ test("reads schedule from a global lexical binding or inline HTML", async () => 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("closes the owned WebDriver session once after polling", async () => {
+  const { DtekBrowser } = await import("../src/server/outages/dtek.ts");
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; method: string }[] = [];
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? "GET" });
+      if (init?.method === "DELETE") return Response.json({ value: null });
+      if (url.endsWith("/session")) return Response.json({ value: { sessionId: "owned-session" } });
+      if (url.endsWith("/url")) return Response.json({ value: null });
+      return Response.json({ value: { fact: null, challenge: true } });
+    };
+    const browser = new DtekBrowser("http://selenium");
+    await browser.poll();
+    await browser.close();
+    await browser.close();
+    assert.deepEqual(calls.filter(({ method }) => method === "DELETE"), [
+      { url: "http://selenium/session/owned-session", method: "DELETE" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("interrupts a pending WebDriver command when the worker shuts down", async () => {
+  const { DtekBrowser } = await import("../src/server/outages/dtek.ts");
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+    const shutdown = new AbortController();
+    const pending = new DtekBrowser("http://selenium").poll(shutdown.signal);
+    shutdown.abort();
+    await assert.rejects(pending);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

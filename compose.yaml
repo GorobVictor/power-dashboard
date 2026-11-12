@@ -74,7 +74,8 @@ services:
     ports:
       - "${DTEK_BROWSER_PORT:-7900}:7900"
     environment:
-      SE_NODE_SESSION_TIMEOUT: "86400"
+      SE_NODE_SESSION_TIMEOUT: "300"
+      SE_SESSION_REQUEST_TIMEOUT: "30"
       SE_VNC_PASSWORD: ${DTEK_BROWSER_PASSWORD:-secret}
     restart: unless-stopped
 

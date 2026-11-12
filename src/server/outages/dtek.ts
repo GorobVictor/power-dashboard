@@ -67,8 +67,8 @@ export class DtekBrowser {
   private awaitingChallenge = false;
   private readonly endpoint: string;
   constructor(endpoint: string) { this.endpoint = endpoint; }
-  private async command(path: string, body?: object) {
-    const response = await fetch(`${this.endpoint}${path}`, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(45_000) });
+  private async command(path: string, body?: object, signal?: AbortSignal) {
+    const response = await fetch(`${this.endpoint}${path}`, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(45_000)]) : AbortSignal.timeout(45_000) });
     const data = await response.json();
     if (!response.ok || data.value?.error) {
       const code = typeof data.value?.error === "string" && /^[a-z ]+$/.test(data.value.error)
@@ -77,19 +77,31 @@ export class DtekBrowser {
     }
     return data.value;
   }
-  async poll() {
+  async close() {
+    const session = this.session;
+    this.session = null;
+    this.awaitingChallenge = false;
+    if (!session) return;
+    const response = await fetch(`${this.endpoint}/session/${encodeURIComponent(session)}`, {
+      method: "DELETE", signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok && response.status !== 404) throw new DtekError(`WebDriver close: HTTP ${response.status}`);
+    log.info("Selenium browser session closed");
+  }
+
+  async poll(signal?: AbortSignal) {
     if (!this.session) {
       this.stage = "browser.session";
-      const session = await this.command("/session", { capabilities: { alwaysMatch: { browserName: "chrome" } } });
+      const session = await this.command("/session", { capabilities: { alwaysMatch: { browserName: "chrome" } } }, signal);
       this.session = session.sessionId;
       log.info("Selenium browser session created");
     }
     const base = `/session/${this.session}`;
     try {
       this.stage = "browser.navigate";
-      if (!this.awaitingChallenge) await this.command(`${base}/url`, { url: "https://www.dtek-krem.com.ua/ua/shutdowns" });
+      if (!this.awaitingChallenge) await this.command(`${base}/url`, { url: "https://www.dtek-krem.com.ua/ua/shutdowns" }, signal);
       this.stage = "browser.read";
-      const result = await this.command(`${base}/execute/sync`, { script: readPageScript, args: [] });
+      const result = await this.command(`${base}/execute/sync`, { script: readPageScript, args: [] }, signal);
       if (!result.fact && result.challenge) {
         this.awaitingChallenge = true;
         return { challenge: true as const };
