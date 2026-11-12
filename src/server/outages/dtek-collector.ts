@@ -4,7 +4,7 @@ import { createLogger, errorFields } from "../logger.ts";
 import { saveOutagePollWithTelegram } from "../telegram/outages.ts";
 import { DtekBrowser, DtekError } from "./dtek.ts";
 import { enqueueTelegramMessages } from "../telegram/outbox.ts";
-import { escapeMarkdown } from "../telegram/markdown.ts";
+import { captchaMessage } from "../telegram/markdown.ts";
 import { lockOutageSource, saveOutagePoll } from "./repository.ts";
 
 const intervalMs = 60_000;
@@ -55,7 +55,7 @@ export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?
                   const url = process.env.DTEK_BROWSER_URL;
                   if (url) {
                     stage = "telegram.enqueue";
-                    await enqueueTelegramMessages(db, [`Потрібно пройти перевірку ДТЕК: ${escapeMarkdown(url)}`]);
+                    await enqueueTelegramMessages(db, [captchaMessage(url)]);
                     challengeNotified = true;
                     log.info("CAPTCHA notification queued for Telegram");
                   } else if (!challengeNotified) {

@@ -74,43 +74,43 @@ function formatDuration(minutes: number) {
   return `${hours} год ${remainder} хв`;
 }
 
-function scheduleMessage(
+export function scheduleMessage(
   { date, queue, content }: Schedule, previousContent: ScheduleContent | null, wasPublished: boolean,
 ) {
-  const event = wasPublished ? "Оновився графік ДТЕК" : "З’явився графік ДТЕК";
-  const dateLabel = escapeMarkdown(date.split("-").reverse().join("."));
-  const lines = [`📅 *${event}*`, `Черга *${escapeMarkdown(queue)}* · ${dateLabel} · Київська область`, ""];
-
   const plan = plannedOutages(content);
+  const previousPlan = plannedOutages(previousContent);
+  const plannedChanges = plan && previousPlan
+    ? intervalChanges("Змінилися планові відключення", previousPlan.intervals, plan.intervals) : [];
+  const possibleChanges = previousContent
+    ? intervalChanges("Змінилися можливі відключення", outageIntervals(previousContent.possible), outageIntervals(content.possible)) : [];
+  let heading = "📅 *З’явився графік ДТЕК*";
+  if (wasPublished) {
+    if (!plan || !previousPlan) {
+      heading = "⚠️ *Графік оновився · порівняння недоступне*";
+    } else {
+      const difference = previousPlan.minutes - plan.minutes;
+      if (difference > 0) heading = `🟢 *Графік покращився · світла на ${formatDuration(difference)} більше*`;
+      else if (difference < 0) heading = `🔴 *Графік погіршився · світла на ${formatDuration(-difference)} менше*`;
+      else if (plannedChanges.length) heading = "🔄 *Відключення перенесли · загальна тривалість не змінилася*";
+      else if (possibleChanges.length) heading = "🔄 *Змінилися можливі відключення*";
+      else heading = "📅 *Графік ДТЕК оновився*";
+    }
+  }
+  const dateLabel = escapeMarkdown(date.split("-").reverse().join("."));
+  const lines = [heading, `Черга *${escapeMarkdown(queue)}* · ${dateLabel} · Київська область`, ""];
+
   if (!plan) {
     if (content.status === "EmergencyShutdowns") lines.push("⚠️ ДТЕК повідомляє про аварійні обмеження");
     if (content.status === "WaitingForSchedule") lines.push("Очікуємо на публікацію графіка ДТЕК");
     lines.push("Тривалість відключень за добу поки невідома");
   } else {
     lines.push(
-      `💡 Зі світлом за графіком: *${formatDuration(MINUTES_PER_DAY - plan.minutes)}*`,
-      `🌑 Без світла за графіком: *${formatDuration(plan.minutes)}*`,
+      `💡 Зі світлом: *${formatDuration(MINUTES_PER_DAY - plan.minutes)}*`,
+      `🌑 Без світла: *${formatDuration(plan.minutes)}*`,
     );
   }
 
-  if (wasPublished && previousContent) {
-    const previousPlan = plannedOutages(previousContent);
-    if (!plan || !previousPlan) {
-      lines.push("", "Порівняння з попереднім графіком недоступне");
-    } else {
-      lines.push(
-        ...intervalChanges("Зміни планових відключень", previousPlan.intervals, plan.intervals),
-        ...intervalChanges("Зміни можливих відключень", outageIntervals(previousContent.possible), outageIntervals(content.possible)),
-      );
-      const difference = previousPlan.minutes - plan.minutes;
-      if (difference === 0) {
-        lines.push("", "↔️ Загальний час зі світлом не змінився");
-      } else {
-        const duration = formatDuration(Math.abs(difference));
-        lines.push("", difference > 0 ? `📈 Світла на *${duration} більше*` : `📉 Світла на *${duration} менше*`);
-      }
-    }
-  }
+  if (wasPublished && plan && previousPlan) lines.push(...plannedChanges, ...possibleChanges);
   return lines.join("\n");
 }
 

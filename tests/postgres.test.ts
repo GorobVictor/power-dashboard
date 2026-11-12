@@ -191,14 +191,14 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(20, 200, 94);
       await save(21, -100, null);
       assert.deepEqual(await telegramMessages(), [
-        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *30%*",
-        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *19%*",
+        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*",
+        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *19%*",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
         "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
         "🔋 *Акумулятор розрядився нижче 99%*\nFirst\n\nЗаряд: *98%*",
-        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *97%*",
-        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *97%*",
-        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *94%*",
+        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *97%*",
+        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *97%*",
+        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *94%*",
       ]);
       assert.deepEqual(await readBatteryBaseline(db, second.id), { batteryPowerW: null, socPct: 87 });
       await db.query("DELETE FROM telegram_outbox");
@@ -249,19 +249,19 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       assert.equal(messages.length, 6);
       assert.equal(messages[0], [
         "📅 *З’явився графік ДТЕК*", "Черга *4\\.1* · 13\\.11\\.2026 · Київська область", "",
-        "💡 Зі світлом за графіком: *22 год*", "🌑 Без світла за графіком: *2 год*",
+        "💡 Зі світлом: *22 год*", "🌑 Без світла: *2 год*",
       ].join("\n"));
-      assert.match(messages[1], /Оновився графік ДТЕК[\s\S]*24 год[\s\S]*Світла на \*2 год більше\*/);
-      assert.match(messages[1], /Зміни планових відключень\*\nБуло: 00:00–01:30, 02:30–03:00\nСтало: —/);
-      assert.match(messages[2], /23 год 30 хв[\s\S]*Світла на \*30 хв менше\*/);
-      assert.match(messages[2], /Зміни планових відключень\*\nБуло: —\nСтало: 00:00–00:30/);
-      assert.match(messages[3], /Загальний час зі світлом не змінився/);
-      assert.match(messages[3], /Зміни планових відключень\*\nБуло: 00:00–00:30\nСтало: 00:30–01:00/);
-      assert.doesNotMatch(messages[3], /Зміни можливих відключень/);
-      assert.match(messages[4], /Зміни можливих відключень\*\nБуло: 03:00–04:00\nСтало: 23:30–24:00/);
-      assert.doesNotMatch(messages[4], /Зміни планових відключень/);
-      assert.match(messages[5], /аварійні обмеження[\s\S]*Тривалість відключень за добу поки невідома[\s\S]*Порівняння з попереднім графіком недоступне/);
-      assert.doesNotMatch(messages[5], /Зміни планових відключень/);
+      assert.match(messages[1], /^🟢 \*Графік покращився · світла на 2 год більше\*[\s\S]*24 год/);
+      assert.match(messages[1], /Змінилися планові відключення\*\nБуло: 00:00–01:30, 02:30–03:00\nСтало: —/);
+      assert.match(messages[2], /^🔴 \*Графік погіршився · світла на 30 хв менше\*[\s\S]*23 год 30 хв/);
+      assert.match(messages[2], /Змінилися планові відключення\*\nБуло: —\nСтало: 00:00–00:30/);
+      assert.match(messages[3], /^🔄 \*Відключення перенесли · загальна тривалість не змінилася\*/);
+      assert.match(messages[3], /Змінилися планові відключення\*\nБуло: 00:00–00:30\nСтало: 00:30–01:00/);
+      assert.doesNotMatch(messages[3], /Змінилися можливі відключення/);
+      assert.match(messages[4], /Змінилися можливі відключення\*\nБуло: 03:00–04:00\nСтало: 23:30–24:00/);
+      assert.doesNotMatch(messages[4], /Змінилися планові відключення/);
+      assert.match(messages[5], /^⚠️ \*Графік оновився · порівняння недоступне\*[\s\S]*аварійні обмеження[\s\S]*Тривалість відключень за добу поки невідома/);
+      assert.doesNotMatch(messages[5], /Змінилися планові відключення/);
       assert.equal((await findScheduleHistory(db, waiting.date, otherQueue.queue)).length, 2);
       await db.query("DELETE FROM telegram_outbox");
     });
@@ -285,8 +285,8 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
         db, first, { ...metrics, measuredAt: at(30), batteryPowerW: -100, socPct: 29 }, charging, options,
       );
       assert.deepEqual(await telegramMessages(), [
-        "⚡ *Акумулятор почав заряджатися*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
-        "🔋 *Акумулятор почав розряджатися*\nFirst\n\nЗаряд: *29%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
+        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
+        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *29%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
       ]);
       assert.match(await describeOutageAt(db, queue, at(31)), /застарів/);
       assert.match(await describeOutageAt(db, "4.2", at(30)), /недоступний/);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sendTelegramMessage, TelegramSendError } from "../src/server/telegram/client.ts";
-import { escapeMarkdown } from "../src/server/telegram/markdown.ts";
+import { captchaMessage, escapeMarkdown } from "../src/server/telegram/markdown.ts";
 
 const destination = { token: "123:test-token", chatId: "-1001234567890" };
 
@@ -38,4 +38,10 @@ test("keeps retry hints and excludes the bot token from errors", async () => {
   await assert.rejects(sendTelegramMessage(destination, { text: "test" }, signal, async (input) => {
     throw new Error(`Failed to fetch ${input}`);
   }), { message: "Telegram request failed" });
+});
+
+
+test("formats the CAPTCHA request and escapes the URL", () => {
+  assert.equal(captchaMessage("https://example.test/a_b?q=1&x=2"),
+    "⚠️ *Потрібна перевірка ДТЕК*\n\nПройдіть перевірку за посиланням:\nhttps://example\\.test/a\\_b?q\\=1&x\\=2");
 });
