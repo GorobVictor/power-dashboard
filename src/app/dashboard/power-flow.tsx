@@ -110,7 +110,7 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
     : stale ? "Останній відомий стан" : "Актуальні дані";
 
   return (
-    <Card className={cn("power-flow gap-2.5 px-4 py-3.5 sm:px-5", mobilePanelClassName)}>
+    <Card className={cn("power-flow gap-2.5 px-4 py-4 sm:px-5", mobilePanelClassName)}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <div className="flex min-w-0 items-center gap-2">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-success-surface text-success">

@@ -53,7 +53,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --background: #11171f;
     --foreground: #e8eff5;
@@ -82,6 +82,45 @@
     --schedule-charge: #9de6c9;
   }
 }
+
+:root:is([data-theme="forest-night"], [data-theme="ocean-night"], [data-theme="violet-night"], [data-theme="ember-night"], [data-theme="graphite"]) {
+  color-scheme: dark;
+  --background: #11171f;
+  --foreground: #e8eff5;
+  --card: #1a222d;
+  --muted: #24303d;
+  --muted-foreground: #aebdca;
+  --primary: #8cd6b9;
+  --primary-foreground: #132d25;
+  --accent: #253b36;
+  --accent-foreground: #bbebd7;
+  --border: #334353;
+  --input: #64788b;
+  --ring: #8cd6b9;
+  --success: #a1e3c5;
+  --success-surface: #203f36;
+  --warning: #ffcf89;
+  --warning-surface: #45341d;
+  --danger: #ffb8b6;
+  --danger-surface: #4e2a30;
+  --chart-charge: #8cd6b9;
+  --chart-grid: #83baf6;
+  --chart-backup: #ffcf89;
+  --schedule-power: rgb(77 62 38);
+  --schedule-outage: #10161f;
+  --schedule-unknown: #283440;
+  --schedule-charge: #9de6c9;
+}
+
+/* Theme palettes share semantic status colors so warnings remain recognizable. */
+:root[data-theme="ocean"] { --background:#f1f6fb; --foreground:#172b3c; --card:#ffffff; --muted:#e6eff7; --muted-foreground:#4d6476; --primary:#155985; --accent:#e1eff9; --accent-foreground:#164c70; --border:#d3e1ed; --ring:#286b98; }
+:root[data-theme="violet"] { --background:#f7f4fa; --foreground:#30263b; --card:#ffffff; --muted:#eee8f4; --muted-foreground:#655870; --primary:#684286; --accent:#f0e7f8; --accent-foreground:#57366f; --border:#e3d9eb; --ring:#795293; }
+:root[data-theme="sand"] { --background:#faf6ed; --foreground:#382c20; --card:#fffdf8; --muted:#f2eadb; --muted-foreground:#6b5c49; --primary:#805320; --accent:#f8ecd7; --accent-foreground:#704516; --border:#e8ddca; --ring:#92662f; }
+:root[data-theme="rose"] { --background:#fbf4f4; --foreground:#39262a; --card:#ffffff; --muted:#f5e9ea; --muted-foreground:#72585d; --primary:#914653; --accent:#fae8eb; --accent-foreground:#793744; --border:#ecd9dc; --ring:#a24e5d; }
+:root[data-theme="ocean-night"] { --background:#0c1c29; --foreground:#e4f1fa; --card:#152a3b; --muted:#203b50; --muted-foreground:#afc8d9; --primary:#91ccf4; --primary-foreground:#102c40; --accent:#203f54; --accent-foreground:#c4e7fb; --border:#345269; --input:#718fa4; --ring:#91ccf4; }
+:root[data-theme="violet-night"] { --background:#1c1726; --foreground:#f0eafb; --card:#292236; --muted:#382e47; --muted-foreground:#c5b8d6; --primary:#d2b3f1; --primary-foreground:#302140; --accent:#40314e; --accent-foreground:#edddfa; --border:#50435f; --input:#8d7d9f; --ring:#d2b3f1; }
+:root[data-theme="ember-night"] { --background:#251a16; --foreground:#f9eee8; --card:#35251e; --muted:#493329; --muted-foreground:#d5beb1; --primary:#f3bd8e; --primary-foreground:#3a2417; --accent:#4c3325; --accent-foreground:#ffdfc4; --border:#614738; --input:#a58a78; --ring:#f3bd8e; }
+:root[data-theme="graphite"] { --background:#181a1d; --foreground:#f0f1f2; --card:#25282c; --muted:#34383d; --muted-foreground:#bec3c8; --primary:#c7d6e1; --primary-foreground:#202a30; --accent:#38434a; --accent-foreground:#e3f0f7; --border:#494f55; --input:#858e96; --ring:#c7d6e1; }
 
 .dashboard-select {
   appearance: none;

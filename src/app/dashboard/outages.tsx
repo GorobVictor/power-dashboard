@@ -265,7 +265,7 @@ export function OutagesPanel({ schedules, onHistory, ...filter }: QueueFilter & 
     : { label: "Очікуємо дані", tone: "muted" } as const;
 
   return (
-    <Card className={cn("gap-3 py-3.5", mobilePanelClassName)}>
+    <Card className={cn("gap-3 py-4", mobilePanelClassName)}>
       <CardHeader className="gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">

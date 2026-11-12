@@ -75,10 +75,10 @@ export function DashboardDeck() {
   }
 
   return (
-    <div className="max-lg:flex max-lg:grow max-lg:flex-col">
+    <div className="max-lg:flex max-lg:grow max-lg:flex-col max-lg:pb-[calc(3.25rem+env(safe-area-inset-bottom))]">
       {active !== "overview" && <h1 className="sr-only lg:hidden">Power Dashboard</h1>}
-      <div className="sticky top-0 z-20 bg-background pb-3 lg:hidden">
-        <div role="tablist" aria-label="Розділи дашборда" className="grid grid-cols-3 gap-1 rounded-xl border bg-card p-1 shadow-xs">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-card px-3.5 pt-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] sm:px-6 lg:hidden">
+        <div role="tablist" aria-label="Розділи дашборда" className="mx-auto grid max-w-7xl grid-cols-3 gap-1">
           {panels.map(({ id, controls, label, icon: Icon }, index) => (
             <button key={id} id={`dashboard-tab-${id}`} type="button" role="tab" aria-controls={active === "archive" && id === "schedule" ? "outage-archive" : controls} aria-selected={active === id || (active === "archive" && id === "schedule")}
               tabIndex={active === id || (active === "archive" && id === "schedule") ? 0 : -1} onClick={() => selectPanel(id)}

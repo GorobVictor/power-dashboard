@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
+import { themes, themeStorageKey } from "@/lib/themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,8 +26,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="uk"
       className="h-full antialiased"
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Script id="theme-init" strategy="beforeInteractive">{`try { var theme = localStorage.getItem(${JSON.stringify(themeStorageKey)}); if (${JSON.stringify(themes.map(({ id }) => id))}.includes(theme)) document.documentElement.dataset.theme = theme; } catch {}`}</Script>
+        {children}
+      </body>
     </html>
   );
 }
