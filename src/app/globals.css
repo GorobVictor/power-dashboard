@@ -83,6 +83,26 @@
   }
 }
 
+.dashboard-select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 0.85rem center, right 0.55rem center;
+  background-size: 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
+@media (pointer: coarse) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
 .schedule-possible {
   background: repeating-linear-gradient(135deg, var(--schedule-unknown) 0 4px, var(--border) 4px 6px);
 }
@@ -96,6 +116,10 @@
     background: var(--background);
     color: var(--foreground);
     font-family: system-ui, sans-serif;
+  }
+
+  button {
+    appearance: none;
   }
 }
 

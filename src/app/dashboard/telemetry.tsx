@@ -313,7 +313,7 @@ export function TelemetryPanel() {
             }
             setFilter({ period: "dates", from, to });
           }}>
-            <div className="grid grid-cols-2 items-end gap-2 min-[480px]:grid-cols-[1fr_1fr_auto]">
+            <div className="grid grid-cols-1 items-end gap-2 min-[400px]:grid-cols-2 min-[480px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
                 Початкова дата
                 <Input type="date" name="from" defaultValue={calendar ? selection.from : today} max={today || undefined} required />
@@ -322,7 +322,7 @@ export function TelemetryPanel() {
                 Кінцева дата
                 <Input type="date" name="to" defaultValue={calendar ? selection.to : today} max={today || undefined} required />
               </label>
-              <Button type="submit" variant="outline" className="col-span-2 min-[480px]:col-span-1">Показати</Button>
+              <Button type="submit" variant="outline" className="min-[400px]:col-span-2 min-[480px]:col-span-1">Показати</Button>
             </div>
             {dateError && <p role="alert" className="text-xs text-muted-foreground">Кінцева дата має бути не раніше початкової.</p>}
           </form>

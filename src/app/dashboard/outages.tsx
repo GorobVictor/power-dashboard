@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, inputClassName } from "@/components/ui/input";
+import { Input, selectClassName } from "@/components/ui/input";
 import type { DashboardSchedule } from "@/lib/dashboard-feed";
 import { shiftTelemetryDate, telemetryWindow, type TelemetryHistory } from "@/lib/telemetry-history";
 import { cn } from "@/lib/utils";
@@ -195,7 +195,7 @@ function QueuePicker({ queue, queues, selectQueue, compact }: QueueFilter & { co
     <div className="flex flex-wrap items-center justify-between gap-1.5">
       <label htmlFor={id} className={compact ? "sr-only" : "text-xs font-medium text-muted-foreground"}>Черга відключень</label>
       <select id={id} value={queue ?? "all"} onChange={(event) => selectQueue(event.target.value)}
-        className={cn(inputClassName, "h-9 w-auto min-w-28 px-2")}>
+        className={cn(selectClassName, "h-9 w-auto min-w-28 pl-2")}>
         {queues.map((value) => <option key={value} value={value}>Черга {value}</option>)}
         <option value="all">Усі черги</option>
       </select>
@@ -344,7 +344,7 @@ function HistoryVersions({ versions }: { versions: DashboardSchedule[] }) {
         <select aria-label="Версія графіка" value={active} onChange={(event) => {
           const selected = Number(event.target.value);
           setIndex(selected === versions.length - 1 ? null : selected);
-        }} className={inputClassName}>
+        }} className={selectClassName}>
           {versions.map((entry, index) => (
             <option key={index} value={index}>
               Версія {index + 1} · {versionTime.format(new Date(entry.observedAt))} · Черга {entry.queue}
