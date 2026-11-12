@@ -133,3 +133,14 @@ test("schedule comparison distinguishes interval changes and incomplete schedule
   const unknown = { ...current, status: "EmergencyShutdowns" as const, hours: [] };
   assert.ok(compareSchedules(previous, unknown).every((change) => !change.includes("більше на") && !change.includes("менше на")));
 });
+
+test("flow summary keeps missing data and grid exchange distinct", async () => {
+  const { flowSummary, measurementAge } = await import("../src/app/dashboard/flow-status.ts");
+  assert.equal(flowSummary(null, 0, 0), "Стан батареї невідомий");
+  assert.equal(flowSummary(-200, 0, 150), "Батарея розряджається · резервний вихід працює");
+  assert.equal(flowSummary(100, -120, null), "Батарея заряджається · є споживання з мережі");
+  assert.equal(flowSummary(0, 0, 0), "Батарея у спокої");
+  const time = "2026-01-01T00:00:00Z";
+  assert.equal(measurementAge(time, Date.parse(time) + 12_000), "12 с тому");
+  assert.equal(measurementAge(time, Date.parse(time) + 120_000), "2 хв тому");
+});
