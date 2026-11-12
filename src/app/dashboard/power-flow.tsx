@@ -1,6 +1,10 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Battery, BatteryCharging, House, Timer, UtilityPole, Zap, type LucideIcon } from "lucide-react";
+import type { DashboardSchedule } from "@/lib/dashboard-feed";
+import { telemetryWindow } from "@/lib/telemetry-history";
+import { clockTime, kyivMinute, outageIntervals, scheduleBands, scheduleIntervals } from "@/server/outages/intervals";
+import { timeZone } from "@/server/outages/schedules";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { dischargeMinutes, formatDischargeTime } from "./battery-runtime";
@@ -61,8 +65,8 @@ function FlowLink({ direction, animate }: { direction: "right" | "left" | null; 
   );
 }
 
-export function PowerFlow() {
-  const { station, stationStale, connection } = useDashboardLive();
+export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | null; schedules: DashboardSchedule[]; onSchedule: () => void }) {
+  const { station, stationStale, connection, outages, outagesStale, today, now } = useDashboardLive();
   if (!station && connection === "connecting") return <PanelSkeleton label="Завантаження потоку енергії" className={mobilePanelClassName} />;
   const current = station?.kind === "station" ? station : null;
   const measurement = current?.measurement;
@@ -75,6 +79,17 @@ export function PowerFlow() {
     : !measurement ? "Немає вимірів"
     : stale ? "Потрібні свіжі дані"
     : battery !== null && battery >= 0 ? "Без розряду" : "Бракує даних";
+  const schedule = queue ? schedules.find((item) => item.queue === queue && item.date === today) : undefined;
+  const scheduleFresh = Boolean(outages?.lastSuccessfulPollAt) && !outagesStale && connection === "connected";
+  const completePlan = schedule?.status === "ScheduleApplies" && schedule.hours.length === 24 && !schedule.hours.includes(9);
+  const minute = now ? kyivMinute(now) : 0;
+  const next = completePlan && scheduleFresh ? outageIntervals(schedule.hours).find((item) => item.end > minute) : undefined;
+  const ongoing = next && next.start <= minute;
+  const day = today ? telemetryWindow({ from: today, to: today }) : null;
+  const elapsed = day ? (now - day.start) / 60_000 : 0;
+  const currentBand = ongoing && schedule && day ? scheduleBands(scheduleIntervals(schedule), day).find((item) => item.kind === "outage" && item.start <= elapsed && item.end > elapsed) : undefined;
+  const forecast = runtime !== null && now && runtime < 365 * 24 * 60 ? new Date(now + runtime * 60_000) : null;
+  const forecastTime = forecast ? new Intl.DateTimeFormat("uk-UA", { timeZone, dateStyle: "short", timeStyle: "short" }).format(forecast) : null;
   const gridDirection = grid === null || grid === 0 ? null : grid < 0 ? "right" : "left";
   const status = station?.kind === "unconfigured" ? "Станцію не налаштовано"
     : station?.kind === "missing" ? "Станцію не знайдено"
@@ -109,6 +124,11 @@ export function PowerFlow() {
         <FlowNode icon={House} name="Дім" value={home === null || home < 0 ? null : home} unit="Вт" tone="home"
           hint="Резервний вихід" />
       </div>
+      <button type="button" onClick={onSchedule} className="rounded-lg border bg-background/70 px-3 py-2 text-left text-xs outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
+        <span className="font-semibold">{queue ? `Черга ${queue}` : "Графік відключень"}</span>{" · "}
+        {!queue ? "Оберіть чергу" : !scheduleFresh ? "Графік неактуальний або недоступний" : !schedule ? "Графік на сьогодні недоступний" : schedule.status === "NoShutdowns" ? "На сьогодні відключень не заплановано" : schedule.status === "EmergencyShutdowns" || schedule.hours.includes(9) ? "Аварійні обмеження" : !completePlan ? "Графік неповний або очікується" : next ? ongoing ? `За графіком відключення до ${clockTime(next.end)}` : `Наступне відключення ${clockTime(next.start)}–${clockTime(next.end)}` : "На сьогодні більше немає запланованих відключень"}
+        <span className="ml-1 text-muted-foreground">→</span>
+      </button>
       {current && (
         <dl className="grid gap-y-1 border-t pt-2 text-xs sm:grid-cols-2 sm:gap-x-4">
           <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 sm:border-r sm:pr-4">
@@ -122,12 +142,15 @@ export function PowerFlow() {
             title="Залишок енергії поділено на поточну потужність розряду батареї">
             <dt className="flex items-center gap-1.5 text-muted-foreground">
               <Timer aria-hidden="true" className="size-3.5 shrink-0 text-success" />
-              До повного розряду
+              Орієнтовний час роботи
             </dt>
             <dd className={cn("font-semibold tabular-nums", runtime === null ? "text-muted-foreground" : "text-success")}>{runtimeText}</dd>
           </div>
         </dl>
       )}
+      {runtime !== null && <p className="text-xs text-muted-foreground">За поточного навантаження{forecastTime ? ` заряд орієнтовно до ${forecastTime}` : ""}. Навантаження може змінитися.
+        {currentBand && <> {runtime >= currentBand.end - elapsed ? "За поточним графіком заряду може вистачити до кінця відключення." : "За поточним графіком заряд може закінчитися до кінця відключення."}</>}
+      </p>}
     </Card>
   );
 }

@@ -17,6 +17,11 @@ function mode(value: number | null, labels: Record<number, string>) {
   return value === null ? "—" : labels[value] ?? `Код ${value}`;
 }
 
+function EnergyValue({ value }: { value: number | null }) {
+  if (value === null || Math.abs(value) < 1000) return <MetricValue value={value} unit="Вт·год" />;
+  return <span className="tabular-nums">{new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 2 }).format(value / 1000)} <span className="text-[0.65em] font-medium whitespace-nowrap opacity-80">кВт·год</span></span>;
+}
+
 function Metric({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-lg bg-muted/55 px-3 py-2.5">
@@ -62,7 +67,7 @@ export function BatteryPanel({ className }: { className?: string }) {
           ) : (
             <CardContent className="space-y-4 border-t py-4 lg:border-t-0 lg:pt-0">
               <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <Metric label="Залишок енергії"><MetricValue value={measurement.remainingEnergyWh} unit="Вт·год" /></Metric>
+                <Metric label="Залишок енергії"><EnergyValue value={measurement.remainingEnergyWh} /></Metric>
                 <Metric label="Потужність батареї"><MetricValue value={measurement.batteryPowerW} unit="Вт" signed /></Metric>
                 <Metric label="Потужність мережі"><MetricValue value={measurement.gridPowerW} unit="Вт" signed /></Metric>
                 <Metric label="Потужність AC-виходу"><MetricValue value={measurement.acOutputPowerW} unit="Вт" signed /></Metric>
@@ -89,8 +94,8 @@ export function BatteryPanel({ className }: { className?: string }) {
                       ].map(({ label, input, output }) => (
                         <tr key={label} className="border-t">
                           <th scope="row" className="py-2 font-medium">{label}</th>
-                          <td className="py-2 pl-2 text-right wrap-anywhere"><MetricValue value={input} unit="Вт·год" /></td>
-                          <td className="py-2 pl-2 text-right wrap-anywhere"><MetricValue value={output} unit="Вт·год" /></td>
+                          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={input} /></td>
+                          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={output} /></td>
                         </tr>
                       ))}
                     </tbody>

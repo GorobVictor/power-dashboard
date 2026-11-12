@@ -7,7 +7,7 @@ export function ConnectionStatus({ mock }: { mock: boolean }) {
   const { connection } = useDashboardLive();
   const connected = connection === "connected";
   const label = mock ? "Демодані"
-    : connected ? "Наживо" : connection === "connecting" ? "Підключення…" : "Перепідключення…";
+    : connected ? "Сервер підключено" : connection === "connecting" ? "Підключення до сервера…" : "Сервер: перепідключення…";
   return (
     <span role="status" className={cn(
       "inline-flex min-h-7 items-center gap-1.5 rounded-full px-2 text-[0.6875rem] font-medium whitespace-nowrap sm:px-2.5 sm:text-xs",

@@ -13,6 +13,7 @@ import { clockTime, kyivMinute, minutesPerDay, outageIntervals, outageQueues, sc
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
+import { compareSchedules } from "./schedule-insights";
 import { ScheduleChargeChart } from "./telemetry";
 
 const dateFormat = new Intl.DateTimeFormat("uk-UA", { timeZone, weekday: "long", day: "numeric", month: "long" });
@@ -98,7 +99,7 @@ function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; n
 
 const unknownSchedule: ScheduleContent = { status: "WaitingForSchedule", hours: [], possible: [], publishedSchedule: null };
 
-function ScheduleDetails({ schedule = unknownSchedule, now, charge }: { schedule?: ScheduleContent; now?: number; charge?: ChargeHistory }) {
+function ScheduleDetails({ schedule = unknownSchedule, now, charge, stale = false }: { schedule?: ScheduleContent; now?: number; charge?: ChargeHistory; stale?: boolean }) {
   const planned = schedule.status === "WaitingForSchedule" ? [] : outageIntervals(schedule.hours);
   const possible = outageIntervals(schedule.possible);
   const intervals = scheduleIntervals(schedule);
@@ -113,7 +114,7 @@ function ScheduleDetails({ schedule = unknownSchedule, now, charge }: { schedule
     <div className="space-y-2">
       {interval && (
         <p className="text-xs text-muted-foreground">
-          {ongoing ? "Відключення за графіком до " : "Наступне відключення за графіком "}
+          {stale ? "За останнім отриманим графіком: " : ""}{ongoing ? "відключення до " : "наступне відключення "}
           <strong className="font-semibold text-foreground tabular-nums">
             {ongoing ? clockTime(interval.end) : `${clockTime(interval.start)}–${clockTime(interval.end)}`}
           </strong>
@@ -227,7 +228,7 @@ function ScheduleTabs({ id, dates, active, select }: { id: string; dates: string
   );
 }
 
-export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules: DashboardSchedule[] }) {
+export function OutagesPanel({ schedules, onHistory, ...filter }: QueueFilter & { schedules: DashboardSchedule[]; onHistory: () => void }) {
   const { outages, outagesStale, today, now, connection, station, chargeHistory, historySupported, revision, request } = useDashboardLive();
   const { queue } = filter;
   const [selectedDate, setSelectedDate] = useState("");
@@ -273,7 +274,7 @@ export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules
             </span>
             Відключення
           </h2>
-          <QueuePicker {...filter} compact />
+          <div className="flex items-center gap-1"><QueuePicker {...filter} compact /><Button type="button" variant="ghost" onClick={onHistory} className="lg:hidden">Історія змін</Button></div>
         </div>
         {!!dates.length && <ScheduleTabs id={tabsId} dates={dates} active={day} select={setSelectedDate} />}
       </CardHeader>
@@ -311,7 +312,7 @@ export function OutagesPanel({ schedules, ...filter }: QueueFilter & { schedules
                         <ScheduleStatus status={schedule.status} />
                       </div>
                     )}
-                    <ScheduleDetails schedule={schedule} now={minute} charge={charge} />
+                    <ScheduleDetails schedule={schedule} now={minute} charge={charge} stale={stale} />
                   </article>
                 ))}
               </div>
@@ -338,6 +339,8 @@ function HistoryVersions({ versions }: { versions: DashboardSchedule[] }) {
   const [index, setIndex] = useState<number | null>(null);
   const active = Math.min(index ?? versions.length - 1, versions.length - 1);
   const version = versions[active];
+  const previous = versions.slice(0, active).findLast((item) => item.queue === version.queue);
+  const changes = previous ? compareSchedules(previous, version) : [];
   return (
     <div className="space-y-2.5">
       {versions.length > 1 && (
@@ -361,13 +364,14 @@ function HistoryVersions({ versions }: { versions: DashboardSchedule[] }) {
           </div>
           <ScheduleStatus status={version.status} />
         </div>
+        {previous && <div className="rounded-md bg-muted/55 p-2 text-xs"><p className="font-semibold">Зміни від попередньої версії</p>{changes.length ? <ul className="mt-1 space-y-1">{changes.map((change) => <li key={change}>{change}</li>)}</ul> : <p className="mt-1">Видимі інтервали та статус не змінилися.</p>}</div>}
         <ScheduleDetails key={`${version.queue}-${version.observedAt}-${active}`} schedule={version} />
       </article>
     </div>
   );
 }
 
-export function OutageHistoryPanel(filter: QueueFilter) {
+export function OutageHistoryPanel({ onBack, ...filter }: QueueFilter & { onBack: () => void }) {
   const { today, connection, historySupported, schedulesRevision, outageHistory, request } = useDashboardLive();
   const { queue } = filter;
   const dateParam = useSearchParams().get("date");
@@ -393,6 +397,7 @@ export function OutageHistoryPanel(filter: QueueFilter) {
           </span>
           Історія відключень
         </h2>
+        <Button type="button" variant="ghost" onClick={onBack} className="w-fit lg:hidden">← До графіка</Button>
         <QueuePicker {...filter} />
       </CardHeader>
       <CardContent className="space-y-2.5">

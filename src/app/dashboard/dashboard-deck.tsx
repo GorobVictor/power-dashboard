@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CalendarClock, History, Zap } from "lucide-react";
+import { Activity, CalendarClock, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
@@ -12,18 +12,17 @@ import { TelemetryPanel } from "./telemetry";
 const panels = [
   { id: "overview", controls: "energy-overview", label: "Огляд", icon: Zap },
   { id: "schedule", controls: "outage-schedule", label: "Графік", icon: CalendarClock },
-  { id: "archive", controls: "outage-archive", label: "Архів", icon: History },
   { id: "telemetry", controls: "station-telemetry", label: "Виміри", icon: Activity },
 ] as const;
 
 const panelFrame = "min-w-0 lg:grid";
 const panelStorageKey = "power-dashboard.active-panel";
-type Panel = typeof panels[number]["id"];
+type Panel = typeof panels[number]["id"] | "archive";
 
 function readSavedPanel() {
   try {
     const saved = window.localStorage.getItem(panelStorageKey);
-    return panels.find(({ id }) => id === saved)?.id ?? null;
+    return saved === "archive" ? "archive" : panels.find(({ id }) => id === saved)?.id ?? null;
   } catch {
     return null;
   }
@@ -79,10 +78,10 @@ export function DashboardDeck() {
     <div className="max-lg:flex max-lg:grow max-lg:flex-col">
       {active !== "overview" && <h1 className="sr-only lg:hidden">Power Dashboard</h1>}
       <div className="sticky top-0 z-20 bg-background pb-3 lg:hidden">
-        <div role="tablist" aria-label="Розділи дашборда" className="grid grid-cols-4 gap-1 rounded-xl border bg-card p-1 shadow-xs">
+        <div role="tablist" aria-label="Розділи дашборда" className="grid grid-cols-3 gap-1 rounded-xl border bg-card p-1 shadow-xs">
           {panels.map(({ id, controls, label, icon: Icon }, index) => (
-            <button key={id} id={`dashboard-tab-${id}`} type="button" role="tab" aria-controls={controls} aria-selected={active === id}
-              tabIndex={active === id ? 0 : -1} onClick={() => selectPanel(id)}
+            <button key={id} id={`dashboard-tab-${id}`} type="button" role="tab" aria-controls={active === "archive" && id === "schedule" ? "outage-archive" : controls} aria-selected={active === id || (active === "archive" && id === "schedule")}
+              tabIndex={active === id || (active === "archive" && id === "schedule") ? 0 : -1} onClick={() => selectPanel(id)}
               onKeyDown={(event) => {
                 const next = event.key === "Home" ? 0 : event.key === "End" ? panels.length - 1
                   : event.key === "ArrowLeft" ? (index + panels.length - 1) % panels.length
@@ -94,7 +93,7 @@ export function DashboardDeck() {
               }}
               className={cn(
                 "flex min-h-11 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-xs font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:gap-1.5 sm:text-sm",
-                active === id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                (active === id || (active === "archive" && id === "schedule")) ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}>
               <Icon aria-hidden="true" className="size-4 shrink-0" />{label}
             </button>
@@ -120,24 +119,24 @@ export function DashboardDeck() {
           const dx = clientX - origin.x;
           const dy = clientY - origin.y;
           if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-          const index = panels.findIndex(({ id }) => id === active);
+          const index = panels.findIndex(({ id }) => id === (active === "archive" ? "schedule" : active));
           const next = panels[index + (dx < 0 ? 1 : -1)];
           if (next) selectPanel(next.id);
         }}
       >
         <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
           className={cn("max-lg:flex max-lg:flex-col lg:contents", panelClass("overview"))}>
-          <div className={cn(panelFrame, "lg:col-span-2 lg:order-1")}><PowerFlow /></div>
+          <div className={cn(panelFrame, "lg:col-span-2 lg:order-1")}><PowerFlow queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /></div>
           <BatteryPanel className="max-lg:mx-4 max-lg:mb-4 max-lg:bg-background/50 max-lg:shadow-none sm:max-lg:mx-5 lg:order-4" />
         </div>
         <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-2", panelClass("telemetry"))}>
           <TelemetryPanel />
         </section>
         <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, "lg:order-3", panelClass("schedule"))}>
-          <OutagesPanel {...outageQueue} schedules={schedules} />
+          <OutagesPanel {...outageQueue} schedules={schedules} onHistory={() => selectPanel("archive")} />
         </section>
-        <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-archive" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-5", panelClass("archive"))}>
-          <OutageHistoryPanel {...outageQueue} />
+        <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-5", panelClass("archive"))}>
+          <OutageHistoryPanel {...outageQueue} onBack={() => selectPanel("schedule")} />
         </section>
       </div>
     </div>

@@ -113,3 +113,14 @@ test("discharge estimate uses remaining energy and battery draw and preserves ze
   assert.equal(dischargeMinutes(4_680, 0), null);
   assert.equal(dischargeMinutes(4_680, 150), null);
 });
+
+test("schedule comparison distinguishes interval changes and incomplete schedules", async () => {
+  const { compareSchedules } = await import("../src/app/dashboard/schedule-insights.ts");
+  const previous = { status: "ScheduleApplies" as const, hours: Array.from({ length: 24 }, (_, i) => i === 1 ? 1 as const : 0 as const), possible: [], publishedSchedule: null };
+  const current = { ...previous, hours: Array.from({ length: 24 }, (_, i) => i === 2 || i === 3 ? 1 as const : 0 as const) };
+  const changes = compareSchedules(previous, current);
+  assert.match(changes[0], /більше на 1 год 0 хв/);
+  assert.match(changes[1], /було 01:00–02:00; стало 02:00–04:00/);
+  const unknown = { ...current, status: "EmergencyShutdowns" as const, hours: [] };
+  assert.ok(compareSchedules(previous, unknown).every((change) => !change.includes("більше на") && !change.includes("менше на")));
+});
