@@ -33,18 +33,18 @@ function FlowNode({ icon: Icon, name, value, unit, hint, tone, battery, loading 
 }) {
   return (
     <div className={cn(
-      "grid min-w-0 content-start justify-items-center gap-0.5 rounded-lg border bg-background/55 px-1 py-1.5 text-center sm:grid-cols-[auto_minmax(0,1fr)] sm:justify-items-start sm:gap-x-2.5 sm:px-3 sm:py-2 sm:text-left",
+      "grid min-w-0 content-start justify-items-center gap-1 rounded-xl border bg-background/55 px-1.5 py-3 text-center sm:grid-cols-[auto_minmax(0,1fr)] sm:justify-items-start sm:gap-x-2.5 sm:px-3 sm:py-2 sm:text-left",
       tone === "station" && (battery == null || battery === 0 ? "border-border bg-muted/55" : battery < 0 ? "border-warning/45 bg-warning-surface/45" : "border-success/45 bg-success-surface/45"),
     )}>
-      <div className={cn("mb-0.5 grid size-6 place-items-center rounded-md sm:row-span-3 sm:mb-0 sm:size-8 sm:self-center", tone === "station" && battery != null && battery < 0 ? tones.home : tone === "station" && (battery == null || battery === 0) ? tones.grid : tones[tone])}>
-        {loading ? <Skeleton className="size-4" /> : <Icon aria-hidden="true" className="size-3.5 sm:size-4" />}
+      <div className={cn("mb-0.5 grid size-8 place-items-center rounded-lg sm:row-span-3 sm:mb-0 sm:size-8 sm:self-center", tone === "station" && battery != null && battery < 0 ? tones.home : tone === "station" && (battery == null || battery === 0) ? tones.grid : tones[tone])}>
+        {loading ? <Skeleton className="size-4" /> : <Icon aria-hidden="true" className="size-4" />}
       </div>
-      <p className="text-[0.6875rem] font-medium text-muted-foreground sm:text-xs">{loading ? <Skeleton className="h-3 w-12" /> : name}</p>
-      <p className={cn("text-[clamp(0.875rem,3.7vw,1.125rem)] leading-tight font-semibold tracking-tight wrap-anywhere sm:text-2xl",
+      <p className="text-xs font-medium text-muted-foreground sm:text-xs">{loading ? <Skeleton className="h-3 w-12" /> : name}</p>
+      <p className={cn("text-[clamp(1rem,4.5vw,1.25rem)] leading-tight font-semibold tracking-tight wrap-anywhere sm:text-2xl",
         tone === "station" && (battery == null || battery === 0 ? "text-foreground" : battery < 0 ? "text-warning" : "text-success"))}>
         {loading ? <Skeleton className="my-1 h-4 w-12 sm:h-6" /> : <MetricValue value={value} unit={unit} />}
       </p>
-      <p className="min-h-[2.75em] text-[0.6875rem] leading-snug text-muted-foreground sm:text-xs">{loading ? <Skeleton className="mt-1 h-3 w-16 max-w-full" /> : <>{hint}{tone === "station" && value === null && <> · Заряд невідомий</>}</>}</p>
+      <p className="min-h-[2.75em] text-xs leading-snug text-muted-foreground sm:text-xs">{loading ? <Skeleton className="mt-1 h-3 w-16 max-w-full" /> : <>{hint}{tone === "station" && value === null && <> · Заряд невідомий</>}</>}</p>
       {tone === "station" && (
         <div role="progressbar" aria-label="Рівень заряду" aria-valuenow={value ?? undefined}
           className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-foreground/15 sm:col-span-2">
@@ -112,7 +112,7 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
     : stale ? "Останній відомий стан" : "Актуальні дані";
 
   return (
-    <Card aria-busy={loading} className={cn("power-flow gap-2.5 px-4 py-4 sm:px-5", mobilePanelClassName)}>
+    <Card aria-busy={loading} className={cn("power-flow gap-4 px-4 py-5 sm:px-5", mobilePanelClassName)}>
       {loading && <span role="status" className="sr-only">Завантаження потоку енергії</span>}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <div className="flex min-w-0 items-center gap-2">
@@ -125,12 +125,12 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end">
-          {loading ? <Skeleton className="h-5 w-44" /> : <StatusBadge className="w-44 justify-center" tone={!measurement ? "muted" : stale ? "warning" : "success"}>{status}</StatusBadge>}
+          {loading ? <Skeleton className="h-5 w-44" /> : <StatusBadge className="justify-center" tone={!measurement ? "muted" : stale ? "warning" : "success"}>{status}</StatusBadge>}
           {loading ? <Skeleton className="h-3 w-36" /> : measurement && <MeasurementTime measuredAt={measurement.measuredAt} initialNow={now} />}
         </div>
       </div>
       <div className="grid text-sm font-medium">
-        <p aria-hidden="true" className="invisible col-start-1 row-start-1">Батарея розряджається · резервний вихід працює</p>
+        <p aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">Батарея розряджається · резервний вихід працює</p>
         <p className={cn("col-start-1 row-start-1", stale ? "text-muted-foreground" : "text-foreground")}>
           {loading ? <Skeleton className="mt-1 h-4 w-4/5" /> : measurement && (stale ? "Показано останні відомі значення" : flowSummary(battery, grid, home))}
         </p>
@@ -145,8 +145,8 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
         <FlowNode icon={House} name="Резерв" value={home === null || home < 0 ? null : home} unit="Вт" tone="home" loading={loading}
           hint={home === null || home < 0 ? "Немає даних" : "Резервний вихід"} />
       </div>
-      <div className="grid rounded-lg bg-muted/45 px-3 py-2 text-xs" title="Залишок енергії поділено на поточну потужність розряду батареї">
-        <div aria-hidden="true" className="invisible col-start-1 row-start-1">
+      <div className="grid rounded-xl bg-muted/45 px-3.5 py-3 text-sm" title="Залишок енергії поділено на поточну потужність розряду батареї">
+        <div aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">
           <p>◷ &nbsp; Час роботи: &nbsp; ≈ 1 дн 9 год за поточного навантаження · орієнтовно до 14.11.26, 05:00</p>
           <p className="mt-1">Навантаження може змінитися. За поточним графіком заряд може закінчитися до кінця відключення.</p>
         </div>
@@ -163,8 +163,8 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
         </>}
         </div>
       </div>
-      <button type="button" onClick={onSchedule} className={cn("grid rounded-lg border bg-background/70 px-3 py-2 text-left text-xs outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring", queue && (!scheduleFresh || schedule?.status === "EmergencyShutdowns" || schedule?.hours.includes(9)) && "border-warning/45 bg-warning-surface/45")}>
-        <span aria-hidden="true" className="invisible col-start-1 row-start-1">Черга 3.2 · Графік неактуальний або недоступний →</span>
+      <button type="button" onClick={onSchedule} className={cn("grid min-h-12 rounded-xl border bg-background/70 px-3.5 py-3 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring", queue && (!scheduleFresh || schedule?.status === "EmergencyShutdowns" || schedule?.hours.includes(9)) && "border-warning/45 bg-warning-surface/45")}>
+        <span aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">Черга 3.2 · Графік неактуальний або недоступний →</span>
         <span className="col-start-1 row-start-1">{loading ? <Skeleton className="h-4 w-3/4" /> : <><span className="font-semibold">{queue ? `Черга ${queue}` : "Графік відключень"}</span>{" · "}
         {!queue ? "Оберіть чергу" : !scheduleFresh ? "Графік неактуальний або недоступний" : !schedule ? "Графік на сьогодні недоступний" : schedule.status === "NoShutdowns" ? "Сьогодні без відключень" : schedule.status === "EmergencyShutdowns" || schedule.hours.includes(9) ? "Аварійні обмеження" : !completePlan ? "Графік неповний або очікується" : next ? ongoing ? `Відключення до ${clockTime(next.end)}` : `Наступне: ${clockTime(next.start)}–${clockTime(next.end)}` : "Сьогодні більше без відключень"}
         <span className="ml-1 text-muted-foreground">→</span></>}</span>

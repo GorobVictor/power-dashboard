@@ -14,7 +14,8 @@ export function ConnectionStatus({ mock }: { mock: boolean }) {
       connected ? "bg-success-surface text-success" : "bg-muted text-muted-foreground",
     )}>
       <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
-      {label}
+      <span className="sr-only sm:not-sr-only">{label}</span>
+      <span aria-hidden="true" className="sm:hidden">{mock ? "Демо" : connected ? "Онлайн" : connection === "connecting" ? "З’єднання" : "Офлайн"}</span>
     </span>
   );
 }

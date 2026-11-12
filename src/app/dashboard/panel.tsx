@@ -8,7 +8,7 @@ const dateTimeFormat = new Intl.DateTimeFormat("uk-UA", {
   timeZone, dateStyle: "medium", timeStyle: "medium",
 });
 
-export const mobilePanelClassName = "max-lg:border-0 max-lg:bg-transparent max-lg:shadow-none";
+export const mobilePanelClassName = "max-lg:shadow-none";
 
 export function Timestamp({ value }: { value: Date | string }) {
   const date = typeof value === "string" ? new Date(value) : value;

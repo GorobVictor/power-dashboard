@@ -31,13 +31,13 @@ async function Dashboard() {
   return (
     <DashboardLive mock={mock}>
       <div className="max-lg:flex max-lg:min-h-dvh max-lg:flex-col">
-        <header className="relative z-30 border-b bg-card">
-          <div className="mx-auto flex min-h-14 max-w-7xl flex-wrap items-center justify-between gap-x-2 gap-y-0.5 px-3.5 py-1.5 sm:px-6">
-            <div className="flex items-center gap-2 text-sm font-semibold tracking-tight sm:text-base">
+        <header className="relative z-30 border-b bg-card pt-[env(safe-area-inset-top)]">
+          <div className="mx-auto flex min-h-14 max-w-7xl items-center justify-between gap-2 px-4 py-2 sm:px-6">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight sm:text-base">
               <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
                 <Zap aria-hidden="true" className="size-[18px]" />
               </span>
-              Power Dashboard
+              <span className="truncate">Power Dashboard</span>
             </div>
             <div className="flex items-center gap-1 sm:gap-3">
               <ConnectionStatus mock={mock} />
@@ -50,7 +50,7 @@ async function Dashboard() {
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-3.5 py-3.5 max-lg:flex max-lg:grow max-lg:flex-col sm:px-6 sm:py-4">
+        <main className="mx-auto w-full max-w-7xl px-4 py-4 max-lg:flex max-lg:grow max-lg:flex-col sm:px-6 sm:py-4">
           <Suspense fallback={<PanelSkeleton label="Завантаження карток дашборда" />}>
             <DashboardDeck />
           </Suspense>
