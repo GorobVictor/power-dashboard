@@ -30,6 +30,37 @@ export function parseDtekFact(value: unknown): Schedule[] {
 
 const log = createLogger("worker.outages.browser");
 
+// Top-level let/const declarations are global bindings but not window properties.
+const readPageScript = `
+  const schedule = typeof DisconSchedule !== 'undefined' ? DisconSchedule : window.DisconSchedule;
+  let fact = schedule?.fact ?? null;
+  if (!fact) {
+    for (const script of document.scripts) {
+      const text = script.textContent || '';
+      const match = /DisconSchedule\\.fact\\s*=\\s*/.exec(text);
+      if (!match) continue;
+      const start = match.index + match[0].length;
+      if (text[start] !== '{') continue;
+      let depth = 0, inString = false, escaped = false;
+      for (let i = start; i < text.length; i++) {
+        const c = text[i];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (c === String.fromCharCode(92)) escaped = true;
+          else if (c === '"') inString = false;
+        } else if (c === '"') inString = true;
+        else if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) {
+          try { fact = JSON.parse(text.slice(start, i + 1)); } catch {}
+          break;
+        }
+      }
+      if (fact) break;
+    }
+  }
+  return { fact, challenge: !!document.querySelector('iframe[src*=hcaptcha], iframe[title*=challenge]') || (document.body?.innerText ?? '').includes('Additional security check is required') };
+`;
+
 export class DtekBrowser {
   stage = "browser.session";
   private session: string | null = null;
@@ -58,7 +89,7 @@ export class DtekBrowser {
       this.stage = "browser.navigate";
       if (!this.awaitingChallenge) await this.command(`${base}/url`, { url: "https://www.dtek-krem.com.ua/ua/shutdowns" });
       this.stage = "browser.read";
-      const result = await this.command(`${base}/execute/sync`, { script: "return {fact: window.DisconSchedule?.fact ?? null, challenge: !!document.querySelector('iframe[src*=hcaptcha], iframe[title*=challenge]') || (document.body?.innerText ?? '').includes('Additional security check is required')};", args: [] });
+      const result = await this.command(`${base}/execute/sync`, { script: readPageScript, args: [] });
       if (!result.fact && result.challenge) {
         this.awaitingChallenge = true;
         return { challenge: true as const };

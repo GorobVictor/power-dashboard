@@ -62,3 +62,29 @@ test("identifies the failing browser command without exposing its response", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+test("reads schedule from a global lexical binding or inline HTML", async () => {
+  const { runInNewContext } = await import("node:vm");
+  const { DtekBrowser } = await import("../src/server/outages/dtek.ts");
+  const originalFetch = globalThis.fetch;
+  const hours = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [String(i + 1), "yes"]));
+  const fact = { data: { "1794434400": { "GPV3.2": hours } } };
+  try {
+    for (const lexical of [true, false]) {
+      globalThis.fetch = async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/session")) return Response.json({ value: { sessionId: "session" } });
+        if (url.endsWith("/url")) return Response.json({ value: null });
+        const { script } = JSON.parse(String(init?.body));
+        const context = { window: {}, document: { scripts: [{ textContent: `DisconSchedule.fact = ${JSON.stringify(fact)};` }], querySelector: () => null, body: { innerText: "" } } };
+        const prefix = lexical ? `const DisconSchedule = { fact: ${JSON.stringify(fact)} };` : "";
+        return Response.json({ value: runInNewContext(`${prefix} (function(){ ${script} })()`, context) });
+      };
+      const result = await new DtekBrowser("http://selenium").poll();
+      assert.equal(result.challenge, false);
+      if (!result.challenge) assert.equal(result.schedules[0].queue, "3.2");
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
