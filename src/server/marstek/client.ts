@@ -15,7 +15,7 @@ export interface BleConnection extends ByteConnection {
 export type ConnectStation = (station: CollectorStation, signal: AbortSignal) => Promise<BleConnection>;
 
 const commands = {
-  [STATE]: { name: "STATE", timeoutMs: 4_000 },
+  [STATE]: { name: "STATE", timeoutMs: 10_000 },
   [DEVICE_INFO]: { name: "DEVICE_INFO", timeoutMs: 4_000 },
   [GET_WORK_MODE_SETTINGS]: { name: "GET_WORK_MODE_SETTINGS", timeoutMs: 2_000 },
 };
