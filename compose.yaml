@@ -69,7 +69,6 @@ services:
       - default
 
   selenium:
-    profiles: [dtek]
     image: selenium/standalone-chromium:4.52.0-20261101
     shm_size: 2gb
     ports:
