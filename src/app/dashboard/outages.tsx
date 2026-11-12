@@ -195,7 +195,7 @@ function QueuePicker({ queue, queues, selectQueue, compact }: QueueFilter & { co
     <div className="flex flex-wrap items-center justify-between gap-1.5">
       <label htmlFor={id} className={compact ? "sr-only" : "text-xs font-medium text-muted-foreground"}>Черга відключень</label>
       <select id={id} value={queue ?? "all"} onChange={(event) => selectQueue(event.target.value)}
-        className={cn(selectClassName, "h-9 w-auto min-w-28 pl-2")}>
+        className={cn(selectClassName, "h-11 w-auto min-w-28 pl-2")}>
         {queues.map((value) => <option key={value} value={value}>Черга {value}</option>)}
         <option value="all">Усі черги</option>
       </select>
@@ -218,7 +218,7 @@ function ScheduleTabs({ id, dates, active, select }: { id: string; dates: string
             select(dates[next]);
             document.getElementById(`${id}-tab-${dates[next]}`)?.focus();
           }}
-          className={cn("min-h-9 flex-1 cursor-pointer rounded-md px-3 text-xs font-semibold whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          className={cn("min-h-11 flex-1 cursor-pointer rounded-md px-3 text-xs font-semibold whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             date === active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
           {index === 0 ? "Сьогодні" : index === 1 ? "Завтра" : tabDateFormat.format(new Date(`${date}T00:00:00Z`))}
         </button>
@@ -341,16 +341,17 @@ function HistoryVersions({ versions }: { versions: DashboardSchedule[] }) {
   return (
     <div className="space-y-2.5">
       {versions.length > 1 && (
-        <select aria-label="Версія графіка" value={active} onChange={(event) => {
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">Версія графіка
+        <select value={active} onChange={(event) => {
           const selected = Number(event.target.value);
           setIndex(selected === versions.length - 1 ? null : selected);
         }} className={selectClassName}>
           {versions.map((entry, index) => (
             <option key={index} value={index}>
-              Версія {index + 1} · {versionTime.format(new Date(entry.observedAt))} · Черга {entry.queue}
+              Версія {index + 1} · {versionTime.format(new Date(entry.observedAt))}
             </option>
           )).reverse()}
-        </select>
+        </select></label>
       )}
       <article className="space-y-2.5 rounded-lg border bg-background/50 p-3">
         <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">

@@ -10,7 +10,7 @@ import { PowerFlow } from "./power-flow";
 import { TelemetryPanel } from "./telemetry";
 
 const panels = [
-  { id: "overview", controls: "energy-overview station-details", label: "Огляд", icon: Zap },
+  { id: "overview", controls: "energy-overview", label: "Огляд", icon: Zap },
   { id: "schedule", controls: "outage-schedule", label: "Графік", icon: CalendarClock },
   { id: "archive", controls: "outage-archive", label: "Архів", icon: History },
   { id: "telemetry", controls: "station-telemetry", label: "Виміри", icon: Activity },
@@ -34,12 +34,23 @@ function subscribeToSavedPanel(onChange: () => void) {
   return () => window.removeEventListener("storage", onChange);
 }
 
+function subscribeToMobile(onChange: () => void) {
+  const query = window.matchMedia("(min-width: 64rem)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function isMobile() {
+  return !window.matchMedia("(min-width: 64rem)").matches;
+}
+
 export function DashboardDeck() {
   const params = useSearchParams();
-  const [defaultPanel] = useState<Panel>(() => params.has("date") ? "archive" : "overview");
+  const [dateLink] = useState(() => params.has("date"));
   const [selection, setSelection] = useState<Panel>();
   const savedPanel = useSyncExternalStore(subscribeToSavedPanel, readSavedPanel, () => null);
-  const active = selection ?? savedPanel ?? defaultPanel;
+  const mobile = useSyncExternalStore(subscribeToMobile, isMobile, () => false);
+  const active = selection ?? (dateLink ? "archive" : savedPanel ?? "overview");
   const start = useRef<{ x: number; y: number } | null>(null);
   const { schedules, ...outageQueue } = useOutageQueue();
 
@@ -68,9 +79,19 @@ export function DashboardDeck() {
     <div className="max-lg:flex max-lg:grow max-lg:flex-col">
       {active !== "overview" && <h1 className="sr-only lg:hidden">Power Dashboard</h1>}
       <div className="sticky top-0 z-20 bg-background pb-3 lg:hidden">
-        <div role="group" aria-label="Картки дашборда" className="grid grid-cols-4 gap-1 rounded-xl border bg-card p-1 shadow-xs">
-          {panels.map(({ id, controls, label, icon: Icon }) => (
-            <button key={id} type="button" aria-controls={controls} aria-pressed={active === id} onClick={() => selectPanel(id)}
+        <div role="tablist" aria-label="Розділи дашборда" className="grid grid-cols-4 gap-1 rounded-xl border bg-card p-1 shadow-xs">
+          {panels.map(({ id, controls, label, icon: Icon }, index) => (
+            <button key={id} id={`dashboard-tab-${id}`} type="button" role="tab" aria-controls={controls} aria-selected={active === id}
+              tabIndex={active === id ? 0 : -1} onClick={() => selectPanel(id)}
+              onKeyDown={(event) => {
+                const next = event.key === "Home" ? 0 : event.key === "End" ? panels.length - 1
+                  : event.key === "ArrowLeft" ? (index + panels.length - 1) % panels.length
+                  : event.key === "ArrowRight" ? (index + 1) % panels.length : -1;
+                if (next < 0) return;
+                event.preventDefault();
+                selectPanel(panels[next].id);
+                document.getElementById(`dashboard-tab-${panels[next].id}`)?.focus();
+              }}
               className={cn(
                 "flex min-h-11 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-xs font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:gap-1.5 sm:text-sm",
                 active === id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -104,17 +125,18 @@ export function DashboardDeck() {
           if (next) selectPanel(next.id);
         }}
       >
-        <div id="energy-overview" className={cn(panelFrame, "lg:col-span-2", panelClass("overview"))}>
-          <PowerFlow />
+        <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
+          className={cn("max-lg:flex max-lg:flex-col lg:contents", panelClass("overview"))}>
+          <div className={cn(panelFrame, "lg:col-span-2 lg:order-1")}><PowerFlow /></div>
+          <BatteryPanel className="max-lg:mx-4 max-lg:mb-4 max-lg:bg-background/50 max-lg:shadow-none sm:max-lg:mx-5 lg:order-4" />
         </div>
-        <section id="station-telemetry" aria-label="Телеметрія станції" className={cn(panelFrame, panelClass("telemetry"))}>
+        <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-2", panelClass("telemetry"))}>
           <TelemetryPanel />
         </section>
-        <section id="outage-schedule" aria-label="Графік відключень" className={cn(panelFrame, panelClass("schedule"))}>
+        <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, "lg:order-3", panelClass("schedule"))}>
           <OutagesPanel {...outageQueue} schedules={schedules} />
         </section>
-        <BatteryPanel className={cn("max-lg:mx-4 max-lg:mb-4 max-lg:bg-background/50 max-lg:shadow-none sm:max-lg:mx-5", panelClass("overview"))} />
-        <section id="outage-archive" aria-label="Історія відключень" className={cn(panelFrame, panelClass("archive"))}>
+        <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-archive" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-5", panelClass("archive"))}>
           <OutageHistoryPanel {...outageQueue} />
         </section>
       </div>

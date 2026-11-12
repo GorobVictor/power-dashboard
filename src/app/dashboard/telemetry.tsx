@@ -121,24 +121,25 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
         </div>
       ) : (
         <>
-          <p id={instructions} className="sr-only">Натисніть стрілку ліворуч або праворуч, щоб переглянути виміри.</p>
+          {available.length > 0 && <p id={instructions} className="mb-3 text-xs text-muted-foreground">Торкніться графіка або проведіть по ньому, щоб переглянути виміри. На клавіатурі використовуйте стрілки.</p>}
           <div className={cn("grid min-w-0 gap-x-1.5", overlay ? "grid-cols-[1.55rem_minmax(0,1fr)]" : "grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3.15rem_minmax(0,1fr)]")}>
-            <div aria-hidden="true" className="relative text-right text-[0.625rem] text-muted-foreground tabular-nums sm:text-xs">
+            <div aria-hidden="true" className="relative text-right text-xs text-muted-foreground tabular-nums">
               {plot.ticks.map((value) => (
                 <span key={value} className="absolute right-0 -translate-y-1/2" style={{ top: `${plot.y(value) / 2}%` }}>{number.format(value)}</span>
               ))}
             </div>
             <div
               role="group" tabIndex={available.length ? 0 : undefined} aria-labelledby={label} aria-describedby={available.length ? instructions : undefined}
-              className={cn("relative rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              className={cn("relative touch-pan-y rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 overlay ? "h-28 sm:h-32 xl:h-36" : "h-34 sm:h-40 lg:h-32 xl:h-40")}
               onPointerMove={(event) => {
-                if (event.pointerType !== "mouse") return;
+                if (event.pointerType !== "mouse" && event.buttons !== 1) return;
                 const bounds = event.currentTarget.getBoundingClientRect();
                 selectFraction((event.clientX - bounds.left) / bounds.width);
               }}
               onPointerDown={(event) => {
                 if (event.pointerType === "mouse") return;
+                event.currentTarget.setPointerCapture(event.pointerId);
                 const bounds = event.currentTarget.getBoundingClientRect();
                 selectFraction((event.clientX - bounds.left) / bounds.width);
               }}
@@ -183,7 +184,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
                 </div>
               )}
             </div>
-            <div aria-hidden="true" className="col-start-2 mt-1.5 flex justify-between gap-1 text-[0.625rem] text-muted-foreground tabular-nums sm:text-xs">
+            <div aria-hidden="true" className="col-start-2 mt-1.5 flex justify-between gap-1 text-xs text-muted-foreground tabular-nums">
               {tickFractions.map((fraction, index) => (
                 <span key={fraction} className={tickFractions.length === 5 && index % 2 ? "hidden sm:inline" : undefined}>
                   {calendar && days === 1 && fraction === 1 ? "24:00"
@@ -210,13 +211,13 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
                     <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color }} />
                     {label}
                     <span className="min-w-[4ch] font-semibold text-foreground tabular-nums">
-                      {active ? active[key] === null ? "—" : number.format(active[key]) : null}
+                      {shown ? shown[key] === null ? "—" : number.format(shown[key]) : null}
                     </span>
                   </li>
                 ))}
               </ul>
               <p className="min-h-4">
-                {active && <Timestamp value={new Date(active.time)} />}
+                {shown && <><span>{active ? "Вибрано: " : "Останній вимір: "}</span><Timestamp value={new Date(shown.time)} /></>}
               </p>
             </div>
           )}
@@ -283,7 +284,7 @@ export function TelemetryPanel() {
               setDateError(false);
             }}
               className={cn(
-                "min-h-9 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
+                "min-h-11 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
                 filter.period === period ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}>
               {label}
@@ -293,7 +294,7 @@ export function TelemetryPanel() {
             setDatesOpen(!datesOpen);
             setDateError(false);
           }} className={cn(
-            "min-h-9 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
+            "min-h-11 cursor-pointer rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-2.5",
             filter.period === "dates" || datesOpen ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}>
             Дати
@@ -332,7 +333,7 @@ export function TelemetryPanel() {
             {([{ key: "charge", label: "Заряд" }, { key: "power", label: "Потужність" }] as const).map(({ key, label }) => (
               <button type="button" key={key} onClick={() => setChart(key)} aria-pressed={chart === key}
                 className={cn(
-                  "min-h-9 cursor-pointer rounded-md border px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-h-11 cursor-pointer rounded-md border px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   chart === key ? "border-transparent bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted",
                 )}>
                 {label}
