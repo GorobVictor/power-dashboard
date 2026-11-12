@@ -7,9 +7,10 @@ import { describeOutageAt } from "./outages.ts";
 import { enqueueTelegramMessages } from "./outbox.ts";
 
 const BATTERY_TRANSITION_ALERT_BELOW_PCT = 99;
+const BATTERY_LEVELS = [0, 10, 20, 30, 40, 50, 75] as const;
 
 type BatteryReading = Pick<Measurement, "batteryPowerW" | "socPct">;
-export type BatteryNotificationOptions = { lowBatteryPct: number; outageQueue?: string };
+export type BatteryNotificationOptions = { outageQueue?: string };
 
 export async function readBatteryBaseline(db: Client, stationId: string): Promise<BatteryReading> {
   const { rows } = await db.query<BatteryReading>(
@@ -23,7 +24,7 @@ export async function readBatteryBaseline(db: Client, stationId: string): Promis
   return rows[0];
 }
 
-export function batteryMessages(station: Station, previous: BatteryReading, current: BatteryReading, limit: number) {
+export function batteryMessages(station: Station, previous: BatteryReading, current: BatteryReading) {
   const { batteryPowerW, socPct } = current;
   if (socPct === null) return [];
   const messages: string[] = [];
@@ -42,17 +43,21 @@ export function batteryMessages(station: Station, previous: BatteryReading, curr
       }
     }
   }
-  if (previous.socPct !== null && socPct < limit && previous.socPct >= limit) {
-    messages.push(`⚠️ *Низький заряд акумулятора*\n${details}\nПоріг сповіщення: ${limit}%`);
+  const previousSoc = previous.socPct;
+  const level = previousSoc === null ? undefined
+    : BATTERY_LEVELS.find((threshold) => previousSoc > threshold && socPct <= threshold);
+  if (level !== undefined) {
+    const heading = level <= 40 ? `⚠️ *Небезпечний рівень заряду · ${level}%*` : `🔋 *Залишилося ${level}% заряду*`;
+    messages.push(`${heading}\n${details}`);
   }
   return messages;
 }
 
 export async function saveBatteryReading(
   db: Client, station: Station, measurement: Measurement, previous: BatteryReading,
-  { lowBatteryPct, outageQueue }: BatteryNotificationOptions,
+  { outageQueue }: BatteryNotificationOptions,
 ): Promise<BatteryReading> {
-  const messages = batteryMessages(station, previous, measurement, lowBatteryPct);
+  const messages = batteryMessages(station, previous, measurement);
   const saved = messages.length === 0
     ? await saveMeasurement(db, station.id, measurement)
     : await inTransaction(db, async () => {

@@ -162,7 +162,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       const at = (seconds: number) => new Date(latest.measuredAt.getTime() + seconds * 1_000);
       const save = async (seconds: number, batteryPowerW: number | null, socPct: number | null) => {
         battery = await saveBatteryReading(
-          db, first, { ...metrics, measuredAt: at(seconds), batteryPowerW, socPct }, battery, { lowBatteryPct: 20 },
+          db, first, { ...metrics, measuredAt: at(seconds), batteryPowerW, socPct }, battery, {},
         );
       };
       await save(1, 200, 30);
@@ -173,7 +173,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(3, 200, 20);
       await save(4, -100, 19);
       await save(5, -100, 18);
-      await save(6, 0, 20);
+      await save(6, 0, 21);
       await save(7, 0, 19);
       await save(8, 0, 100);
       await save(9, -100, 99);
@@ -192,9 +192,9 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(21, -100, null);
       assert.deepEqual(await telegramMessages(), [
         "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*",
+        "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *20%*",
         "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *19%*",
-        "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
-        "⚠️ *Низький заряд акумулятора*\nFirst\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
+        "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *19%*",
         "🔋 *Акумулятор розрядився нижче 99%*\nFirst\n\nЗаряд: *98%*",
         "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *97%*",
         "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *97%*",
@@ -276,17 +276,22 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       };
       const at = (minute: number) => new Date(Date.UTC(2026, 10, 13, 22, minute));
       await saveOutagePoll(db, [schedule], at(28));
-      const options = { lowBatteryPct: 20, outageQueue: queue };
+      const options = { outageQueue: queue };
       const battery = await readBatteryBaseline(db, first.id);
       const charging = await saveBatteryReading(
         db, first, { ...metrics, measuredAt: at(29), batteryPowerW: 100, socPct: 30 }, battery, options,
       );
-      await saveBatteryReading(
+      const discharging = await saveBatteryReading(
         db, first, { ...metrics, measuredAt: at(30), batteryPowerW: -100, socPct: 29 }, charging, options,
+      );
+      await saveBatteryReading(
+        db, first, { ...metrics, measuredAt: new Date(at(30).getTime() + 1000), batteryPowerW: -100, socPct: 19 }, discharging, options,
       );
       assert.deepEqual(await telegramMessages(), [
         "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
+        "⚠️ *Небезпечний рівень заряду · 30%*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
         "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *29%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
+        "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *19%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
       ]);
       assert.match(await describeOutageAt(db, queue, at(31)), /застарів/);
       assert.match(await describeOutageAt(db, "4.2", at(30)), /недоступний/);

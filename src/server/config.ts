@@ -21,13 +21,11 @@ export function telegramFromEnvironment() {
   if (!chatId || !/^(?:@[A-Za-z0-9_]+|-?\d+)$/.test(chatId)) {
     throw new Error("Set TELEGRAM_CHAT_ID to a channel username or numeric chat ID");
   }
-  const lowBatteryPct = positiveInteger("TELEGRAM_LOW_BATTERY_PCT", 20);
-  if (lowBatteryPct > 100) throw new Error("TELEGRAM_LOW_BATTERY_PCT must be between 1 and 100");
   const outageQueue = process.env.TELEGRAM_DTEK_QUEUE?.trim() || undefined;
   if (outageQueue && !isQueue(outageQueue)) {
     throw new Error("TELEGRAM_DTEK_QUEUE must be a DTEK queue such as 4.1");
   }
-  return { token, chatId, lowBatteryPct, outageQueue };
+  return { token, chatId, outageQueue };
 }
 
 export function stationFromEnvironment(): CollectorStation | null {

@@ -40,11 +40,32 @@ test("unknown durations never claim an improvement or rearrangement", () => {
   assert.match(scheduleMessage(emergency, content, true), /аварійні обмеження/);
 });
 
-test("battery notifications escape station names and retain the threshold", () => {
+test("battery levels trigger at each threshold with the right severity", () => {
   const station = { name: "Station_1.0" } as Station;
-  const messages = batteryMessages(station, { batteryPowerW: 10, socPct: 20 }, { batteryPowerW: -10, socPct: 19 }, 20);
-  assert.deepEqual(messages, [
-    "🔋 *Акумулятор розряджається*\nStation\\_1\\.0\n\nЗаряд: *19%*",
-    "⚠️ *Низький заряд акумулятора*\nStation\\_1\\.0\n\nЗаряд: *19%*\nПоріг сповіщення: 20%",
+  for (const level of [75, 50, 40, 30, 20, 10, 0]) {
+    const messages = batteryMessages(station, { batteryPowerW: -10, socPct: level + 1 }, { batteryPowerW: -10, socPct: level });
+    const heading = level <= 40 ? `⚠️ *Небезпечний рівень заряду · ${level}%*` : `🔋 *Залишилося ${level}% заряду*`;
+    assert.deepEqual(messages, [`${heading}\nStation\\_1\\.0\n\nЗаряд: *${level}%*`]);
+  }
+});
+
+test("battery levels handle skips, recovery, missing and first readings", () => {
+  const station = { name: "Station" } as Station;
+  const messages = (before: number | null, after: number | null) => batteryMessages(station,
+    { batteryPowerW: -10, socPct: before }, { batteryPowerW: -10, socPct: after });
+  assert.deepEqual(messages(80, 27), ["⚠️ *Небезпечний рівень заряду · 30%*\nStation\n\nЗаряд: *27%*"]);
+  assert.deepEqual(messages(20, 19), []);
+  assert.deepEqual(messages(19, 21), []);
+  assert.match(messages(21, 20)[0], /20%/);
+  assert.deepEqual(messages(null, 20), []);
+  assert.deepEqual(messages(30, null), []);
+  assert.deepEqual(messages(50, 50), []);
+});
+
+test("battery level and discharge transition can both be reported", () => {
+  const station = { name: "Station" } as Station;
+  assert.deepEqual(batteryMessages(station, { batteryPowerW: 10, socPct: 41 }, { batteryPowerW: -10, socPct: 40 }), [
+    "🔋 *Акумулятор розряджається*\nStation\n\nЗаряд: *40%*",
+    "⚠️ *Небезпечний рівень заряду · 40%*\nStation\n\nЗаряд: *40%*",
   ]);
 });
