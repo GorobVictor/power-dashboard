@@ -26,3 +26,23 @@ test("selects alerts.energy by default and DTEK only when configured", async () 
     else process.env.OUTAGE_SOURCE = previous;
   }
 });
+
+test("reports missing data and safe WebDriver errors", async () => {
+  const { DtekBrowser } = await import("../src/server/outages/dtek.ts");
+  const originalFetch = globalThis.fetch;
+  let step = 0;
+  try {
+    globalThis.fetch = async () => {
+      const values = [{ sessionId: "session" }, null, { fact: null, challenge: false }];
+      return Response.json({ value: values[step++] });
+    };
+    await assert.rejects(new DtekBrowser("http://selenium").poll(), /does not contain DisconSchedule.fact/);
+    globalThis.fetch = async () => Response.json({ value: { error: "session not created", message: "sensitive session details" } }, { status: 500 });
+    await assert.rejects(new DtekBrowser("http://selenium").poll(), (error: Error) => {
+      assert.equal(error.message, "WebDriver: session not created");
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

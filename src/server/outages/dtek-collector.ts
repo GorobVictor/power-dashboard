@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { databaseClient } from "../db.ts";
 import { createLogger, errorFields } from "../logger.ts";
 import { saveOutagePollWithTelegram } from "../telegram/outages.ts";
-import { DtekBrowser } from "./dtek.ts";
+import { DtekBrowser, DtekError } from "./dtek.ts";
 import { enqueueTelegramMessages } from "../telegram/outbox.ts";
 import { escapeMarkdown } from "../telegram/markdown.ts";
 import { lockOutageSource, saveOutagePoll } from "./repository.ts";
@@ -70,6 +70,7 @@ export async function collectDtekSchedules(shutdown: AbortSignal, telegramQueue?
             log.warn("DTEK poll failed", {
               stage,
               ...errorFields(error),
+              reason: error instanceof DtekError ? error.message : undefined,
               retryInMs: Math.max(0, Math.ceil(nextPoll - performance.now())),
             });
           }
