@@ -19,6 +19,7 @@ type Properties = Record<string, Variant<unknown>>;
 type ManagedObjects = Record<string, Record<string, Properties>>;
 
 export class BluezConnection {
+  private readonly stationId: string;
   private readonly bus: MessageBus = dbus.systemBus();
   private readonly disconnected = new AbortController();
   private owner = "";
@@ -29,7 +30,8 @@ export class BluezConnection {
   private writeType: "request" | "command" = "request";
   stage = "bus.owner";
 
-  constructor(private readonly stationId: string) {
+  constructor(stationId: string) {
+    this.stationId = stationId;
     this.bus.on("error", (error: Error) => this.disconnected.abort(error));
     this.bus.on("message", this.onDeviceSignal);
   }

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bluezConnector } from "../src/server/marstek/bluez.ts";
 import { requestFrame } from "../src/server/marstek/client.ts";
 import {
   decodeState, decodeUpsEnabled, DEVICE_INFO, FrameDecoder, GET_WORK_MODE_SETTINGS, readCommand, STATE, verifyDevice,
 } from "../src/server/marstek/protocol.ts";
+
+test("loads the BlueZ connector in Node.js", () => {
+  assert.equal(typeof bluezConnector("hci0"), "function");
+});
 
 function responseFrame(command: number, payload: Buffer, transition = false) {
   const header = transition
