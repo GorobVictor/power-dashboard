@@ -50,9 +50,16 @@ export class BluezConnection {
       message.body[0] === iface;
   }
 
-  private call(message: MessageLike, signal: AbortSignal) {
+  private async call(message: MessageLike, signal: AbortSignal) {
     signal.throwIfAborted();
-    return abortable(this.bus.call(new dbus.Message({ destination: BLUEZ, ...message })), signal);
+    try {
+      return await abortable(this.bus.call(new dbus.Message({ destination: BLUEZ, ...message })), signal);
+    } catch (error) {
+      if (error instanceof Error && error.name === "DBusError") {
+        Object.assign(error, { dbusInterface: message.interface, dbusMethod: message.member });
+      }
+      throw error;
+    }
   }
 
   private async objects(signal: AbortSignal): Promise<ManagedObjects> {

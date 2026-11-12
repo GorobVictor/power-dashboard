@@ -32,10 +32,16 @@ export function errorFields(error: unknown): Fields {
   const code = "code" in error ? error.code : undefined;
   const cause = error.cause;
   const causeCode = cause instanceof Error && "code" in cause ? cause.code : undefined;
+  const dbusType = error.name === "DBusError" && "type" in error ? error.type : undefined;
+  const dbusInterface = "dbusInterface" in error ? error.dbusInterface : undefined;
+  const dbusMethod = "dbusMethod" in error ? error.dbusMethod : undefined;
   return {
     errorName: error.name,
     errorCode: typeof code === "string" ? code : undefined,
     causeCode: typeof causeCode === "string" ? causeCode : undefined,
+    dbusErrorType: typeof dbusType === "string" ? dbusType : undefined,
+    dbusInterface: typeof dbusInterface === "string" ? dbusInterface : undefined,
+    dbusMethod: typeof dbusMethod === "string" ? dbusMethod : undefined,
   };
 }
 

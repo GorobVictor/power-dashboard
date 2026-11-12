@@ -31,19 +31,25 @@ export async function requestFrame(
   signal.throwIfAborted();
   const decoder = new FrameDecoder();
   const response = Promise.withResolvers<Buffer>();
+  let bytesReceived = 0;
+  let writeCompleted = false;
   const unsubscribe = connection.onBytes((bytes) => {
+    bytesReceived += bytes.length;
     const frame = decoder.push(bytes).find((frame) => frame.command === command);
     if (frame) response.resolve(frame.payload);
   });
   try {
     const [payload] = await abortable(Promise.all([
       response.promise,
-      connection.write(readCommand(command), signal),
+      connection.write(readCommand(command), signal).then(() => { writeCompleted = true; }),
     ]), signal);
     return payload;
   } catch (error) {
     if (timeout.aborted && error === timeout.reason) {
-      throw new DOMException(`BLE request ${name} timed out after ${timeoutMs} ms`, "TimeoutError");
+      throw new DOMException(
+        `BLE request ${name} timed out after ${timeoutMs} ms (writeCompleted=${writeCompleted}, bytesReceived=${bytesReceived})`,
+        "TimeoutError",
+      );
     }
     throw error;
   } finally {
