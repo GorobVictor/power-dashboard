@@ -85,7 +85,8 @@ export function DashboardDeck() {
         onTouchStart={(event) => {
           start.current = null;
           if (event.touches.length !== 1 || window.matchMedia("(min-width: 64rem)").matches) return;
-          if (event.target instanceof Element && event.target.closest("button, select, input, summary, a, [tabindex]")) return;
+          // A focusable tab panel is a container, not an interactive gesture target.
+          if (event.target instanceof Element && event.target.closest("button, select, input, summary, a, [tabindex]:not([role='tabpanel'])")) return;
           const { clientX, clientY } = event.touches[0];
           start.current = { x: clientX, y: clientY };
         }}
