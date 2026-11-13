@@ -126,7 +126,7 @@ export function DashboardDeck() {
         }}
       >
         <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined} aria-owns={mobile ? "station-details" : undefined}
-          className={cn("flex min-w-0 flex-col gap-3", panelClass("overview"))}>
+          className={cn("flex min-w-0 flex-col gap-2.5 lg:gap-3", panelClass("overview"))}>
           <BatteryOverview />
           <PowerFlow className={active !== "archive" ? "lg:grow" : undefined} queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
         </div>

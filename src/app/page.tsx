@@ -50,7 +50,7 @@ async function Dashboard() {
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-4 max-lg:flex max-lg:grow max-lg:flex-col sm:px-6 sm:py-4">
+        <main className="mx-auto w-full max-w-7xl px-4 py-3 max-lg:flex max-lg:grow max-lg:flex-col sm:px-6 sm:py-4">
           <Suspense fallback={<PanelSkeleton label="Завантаження карток дашборда" />}>
             <DashboardDeck />
           </Suspense>

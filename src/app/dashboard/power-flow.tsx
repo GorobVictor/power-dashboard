@@ -98,7 +98,7 @@ export function PowerFlow({ queue, schedules, onSchedule, className }: { queue: 
     : stale ? "Останній відомий стан" : "Актуальні дані";
 
   return (
-    <Card aria-busy={loading} className={cn("power-flow gap-3 px-4 py-4 sm:px-5 lg:gap-4 lg:py-5", mobilePanelClassName, className)}>
+    <Card aria-busy={loading} className={cn("power-flow gap-2.5 px-4 py-3 sm:px-5 lg:gap-4 lg:py-5", mobilePanelClassName, className)}>
       {loading && <span role="status" className="sr-only">Завантаження потоку енергії</span>}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <div className="flex min-w-0 items-center gap-2">
