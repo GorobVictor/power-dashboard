@@ -15,7 +15,7 @@ function sample(time: number) {
     socPct: Math.round(67 + 19 * Math.cos(cycle)),
     backupLoadPowerW,
     batteryPowerW: charging ? 720 : -backupLoadPowerW,
-    gridPowerW: charging ? -(backupLoadPowerW + 720) : 0,
+    gridPowerW: charging ? -(backupLoadPowerW + 780) : 0,
   };
 }
 
@@ -25,7 +25,7 @@ function schedule(date: string, queue: string, observedAt: number, start: number
     queue,
     observedAt: new Date(observedAt).toISOString(),
     status: "ScheduleApplies",
-    hours: Array.from({ length: 24 }, (_, index) => index >= start && index < start + 3 ? 1 : 0),
+    hours: Array.from({ length: 24 }, (_, index) => index === 1 ? 2 : index === 4 || (index >= start && index < start + 3) ? 1 : 0),
     possible: Array.from({ length: 24 }, (_, index) => index === start + 8 ? 1 : 0),
     publishedSchedule: null,
   };
@@ -43,7 +43,7 @@ export function mockStation(now: number): DashboardMessage {
         ...metrics,
         measuredAt: new Date(time).toISOString(),
         remainingEnergyWh: metrics.socPct * 51,
-        acOutputPowerW: metrics.gridPowerW,
+        acOutputPowerW: metrics.gridPowerW + metrics.backupLoadPowerW,
         inverterState: metrics.batteryPowerW > 0 ? 2 : 3,
         workMode: 1,
         upsEnabled: true,

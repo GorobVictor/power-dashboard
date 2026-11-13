@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { BatteryPanel } from "./battery";
+import { BatteryOverview } from "./battery-overview";
 import { OutageHistoryPanel, OutagesPanel, useOutageQueue } from "./outages";
 import { PowerFlow } from "./power-flow";
 import { TelemetryPanel } from "./telemetry";
@@ -126,7 +127,8 @@ export function DashboardDeck() {
       >
         <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
           className={cn("max-lg:flex max-lg:flex-col max-lg:gap-3 lg:contents", panelClass("overview"))}>
-          <div className={cn(panelFrame, "lg:col-span-2 lg:order-1")}><PowerFlow queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /></div>
+          <BatteryOverview className="lg:order-1" />
+          <div className={cn(panelFrame, "lg:order-1")}><PowerFlow queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /></div>
           <BatteryPanel className="lg:order-4" />
         </div>
         <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-2", panelClass("telemetry"))}>

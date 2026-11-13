@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { DetailSummary } from "./detail-summary";
+import { powerDirection } from "./flow-status";
 import { useDashboardLive } from "./live";
 import { MetricValue } from "./metric-value";
 
@@ -30,6 +31,10 @@ function Metric({ label, children }: { label: string; children: ReactNode }) {
       <dd className="mt-0.5 text-sm font-semibold wrap-break-word sm:text-base">{children}</dd>
     </div>
   );
+}
+
+function DirectionalPower({ value, positive, negative }: { value: number | null; positive: string; negative: string }) {
+  return <><MetricValue value={value === null ? null : Math.abs(value)} unit="Вт" /><span className="mt-0.5 block text-xs font-normal text-muted-foreground">{powerDirection(value, positive, negative)}</span></>;
 }
 
 export function BatteryPanel({ className }: { className?: string }) {
@@ -70,13 +75,12 @@ export function BatteryPanel({ className }: { className?: string }) {
             <CardContent className="space-y-4 border-t py-4 lg:border-t-0 lg:pt-0">
               <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <Metric label="Залишок енергії"><EnergyValue value={measurement.remainingEnergyWh} /></Metric>
-                <Metric label="Потужність батареї"><MetricValue value={measurement.batteryPowerW} unit="Вт" signed /></Metric>
-                <Metric label="Потужність мережі"><MetricValue value={measurement.gridPowerW} unit="Вт" signed /></Metric>
-                <Metric label="Потужність AC-виходу"><MetricValue value={measurement.acOutputPowerW} unit="Вт" signed /></Metric>
+                <Metric label="Потужність батареї"><DirectionalPower value={measurement.batteryPowerW} positive="Заряд" negative="Розряд" /></Metric>
+                <Metric label="Обмін з мережею"><DirectionalPower value={measurement.gridPowerW} positive="Від станції" negative="До станції" /></Metric>
+                <Metric label="Потужність інвертора (AC)"><DirectionalPower value={measurement.acOutputPowerW} positive="Віддача" negative="Споживання" /></Metric>
                 <Metric label="Стан інвертора">{mode(measurement.inverterState, inverterStates)}</Metric>
                 <Metric label="Режим роботи">{workMode}</Metric>
               </dl>
-              <p className="text-xs text-muted-foreground">Для мережі й AC-виходу «+» означає віддачу, «−» — споживання.</p>
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Лічильники енергії</h3>
                 <div className="rounded-lg border px-2.5">

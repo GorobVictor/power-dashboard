@@ -1,10 +1,16 @@
-export function flowSummary(battery: number | null, grid: number | null, backup: number | null) {
+export function flowSummary(battery: number | null, grid: number | null, backup: number | null, inverterState: number | null = null) {
+  if (inverterState === 6) return backup !== null && backup > 0
+    ? "Байпас · резервний вихід працює" : "Станція в режимі байпаса";
   if (battery === null) return "Стан батареї невідомий";
   if (battery < 0) return backup !== null && backup > 0
     ? "Батарея розряджається · резервний вихід працює" : "Батарея розряджається";
   if (battery > 0) return grid !== null && grid < 0
     ? "Батарея заряджається · є споживання з мережі" : "Батарея заряджається";
   return "Батарея у спокої";
+}
+
+export function powerDirection(value: number | null, positive: string, negative: string): string {
+  return value === null ? "Немає даних" : value > 0 ? positive : value < 0 ? negative : "Без обміну";
 }
 
 export function measurementAge(measuredAt: string, now: number) {

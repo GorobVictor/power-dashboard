@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, BatteryCharging, House, Timer, UtilityPole, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BatteryCharging, House, Timer, UtilityPole, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DashboardSchedule } from "@/lib/dashboard-feed";
 import { telemetryWindow } from "@/lib/telemetry-history";
@@ -15,43 +15,24 @@ import { useDashboardLive } from "./live";
 import { MetricValue } from "./metric-value";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
 
-const tones = {
-  grid: "bg-muted text-[var(--chart-grid)]",
-  station: "bg-success-surface text-success",
-  home: "bg-warning-surface text-warning",
-};
-
-function FlowNode({ icon: Icon, name, value, unit, hint, tone, battery, loading }: {
+function FlowNode({ icon: Icon, name, value, hint, tone, loading }: {
   icon: LucideIcon;
   name: string;
   value: number | null;
-  unit: string;
   hint: string;
-  tone: keyof typeof tones;
-  battery?: number | null;
+  tone: "grid" | "battery" | "home";
   loading?: boolean;
 }) {
   return (
-    <div className={cn(
-      "grid min-w-0 content-start justify-items-center gap-1 rounded-xl border bg-background/55 px-1.5 py-3 text-center sm:grid-cols-[auto_minmax(0,1fr)] sm:justify-items-start sm:gap-x-2.5 sm:px-3 sm:py-2 sm:text-left",
-      tone === "station" && (battery == null || battery === 0 ? "border-border bg-muted/55" : battery < 0 ? "border-warning/45 bg-warning-surface/45" : "border-success/45 bg-success-surface/45"),
-    )}>
-      <div className={cn("mb-0.5 grid size-8 place-items-center rounded-lg sm:row-span-3 sm:mb-0 sm:size-8 sm:self-center", tone === "station" && battery != null && battery < 0 ? tones.home : tone === "station" && (battery == null || battery === 0) ? tones.grid : tones[tone])}>
+    <div className="grid min-w-0 content-start justify-items-center gap-1 text-center">
+      <div className={cn("mb-1 grid size-9 place-items-center rounded-full border bg-background/60", tone === "grid" ? "text-[var(--chart-grid)]" : tone === "home" ? "text-warning" : "text-success")}>
         {loading ? <Skeleton className="size-4" /> : <Icon aria-hidden="true" className="size-4" />}
       </div>
-      <p className="text-xs font-medium text-muted-foreground sm:text-xs">{loading ? <Skeleton className="h-3 w-12" /> : name}</p>
-      <p className={cn("text-[clamp(1rem,4.5vw,1.25rem)] leading-tight font-semibold tracking-tight wrap-anywhere sm:text-2xl",
-        tone === "station" && (battery == null || battery === 0 ? "text-foreground" : battery < 0 ? "text-warning" : "text-success"))}>
-        {loading ? <Skeleton className="my-1 h-4 w-12 sm:h-6" /> : <MetricValue value={value} unit={unit} />}
+      <p className="text-base leading-tight font-semibold tracking-tight sm:text-lg">
+        {loading ? <Skeleton className="h-5 w-14" /> : <MetricValue value={value} unit="Вт" />}
       </p>
-      <p className="min-h-[2.75em] text-xs leading-snug text-muted-foreground sm:text-xs">{loading ? <Skeleton className="mt-1 h-3 w-16 max-w-full" /> : <>{hint}{tone === "station" && value === null && <> · Заряд невідомий</>}</>}</p>
-      {tone === "station" && (
-        <div role="progressbar" aria-label="Рівень заряду" aria-valuenow={value ?? undefined}
-          className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-foreground/15 sm:col-span-2">
-          <div className={cn("h-full origin-left rounded-full motion-safe:transition-transform motion-safe:duration-500 motion-safe:ease-out", battery == null || battery === 0 ? "bg-muted-foreground" : battery < 0 ? "bg-warning" : "bg-success")}
-            style={{ transform: `scaleX(${(value ?? 0) / 100})` }} />
-        </div>
-      )}
+      <p className="text-xs font-medium text-muted-foreground">{name}</p>
+      <p className="text-xs leading-tight text-muted-foreground">{loading ? <Skeleton className="h-3 w-16" /> : hint}</p>
     </div>
   );
 }
@@ -87,11 +68,16 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
   const grid = measurement?.gridPowerW ?? null;
   const battery = measurement?.batteryPowerW ?? null;
   const home = measurement?.backupLoadPowerW ?? null;
+  const ac = measurement?.acOutputPowerW ?? null;
+  const chargingInput = battery !== null && battery > 0 && ac !== null && ac < 0 ? -ac : null;
+  const chargingDifference = chargingInput !== null && battery !== null ? chargingInput - battery : null;
   const stale = stationStale || connection !== "connected";
-  const runtime = stale ? null : dischargeMinutes(measurement?.remainingEnergyWh ?? null, battery);
+  const bypass = measurement?.inverterState === 6;
+  const runtime = stale || bypass ? null : dischargeMinutes(measurement?.remainingEnergyWh ?? null, battery);
   const runtimeText = runtime !== null ? formatDischargeTime(runtime)
     : !measurement ? "Немає вимірів"
     : stale ? "Потрібні свіжі дані"
+    : bypass ? "Режим байпаса"
     : battery !== null && battery >= 0 ? "Без розряду" : "Бракує даних";
   const schedule = queue ? schedules.find((item) => item.queue === queue && item.date === today) : undefined;
   const scheduleFresh = Boolean(outages?.lastSuccessfulPollAt) && !outagesStale && connection === "connected";
@@ -132,19 +118,45 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
       <div className="grid text-sm font-medium">
         <p aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">Батарея розряджається · резервний вихід працює</p>
         <p className={cn("col-start-1 row-start-1", stale ? "text-muted-foreground" : "text-foreground")}>
-          {loading ? <Skeleton className="mt-1 h-4 w-4/5" /> : measurement && (stale ? "Показано останні відомі значення" : flowSummary(battery, grid, home))}
+          {loading ? <Skeleton className="mt-1 h-4 w-4/5" /> : measurement && (stale ? "Показано останні відомі значення" : flowSummary(battery, grid, home, measurement.inverterState))}
         </p>
       </div>
-      <div className="grid w-full grid-cols-[minmax(0,1fr)_clamp(14px,3vw,32px)_minmax(0,1.15fr)_clamp(14px,3vw,32px)_minmax(0,1fr)]">
-        <FlowNode icon={UtilityPole} name="Мережа" value={grid === null ? null : Math.abs(grid)} unit="Вт" tone="grid" loading={loading}
+      <div className="mx-auto grid w-full max-w-lg grid-cols-[minmax(0,1fr)_clamp(12px,5vw,32px)_minmax(70px,0.8fr)_clamp(12px,5vw,32px)_minmax(0,1fr)] items-start pt-1">
+        <FlowNode icon={UtilityPole} name="Мережа" value={grid === null ? null : Math.abs(grid)} tone="grid" loading={loading}
           hint={grid === null ? "Немає даних" : grid < 0 ? "До станції" : grid > 0 ? "Від станції" : "Без обміну"} />
-        <FlowLink direction={gridDirection} animate={!stale} />
-        <FlowNode icon={BatteryCharging} name="Станція" value={measurement?.socPct ?? null} unit="%" tone="station" battery={battery} loading={loading}
-          hint={battery === null ? "Немає даних про батарею" : battery === 0 ? "У спокої · 0 Вт" : `${battery < 0 ? "Розряд" : "Заряд"} · ${new Intl.NumberFormat("uk-UA").format(Math.abs(battery))} Вт`} />
-        <FlowLink direction={home !== null && home > 0 ? "right" : null} animate={!stale} />
-        <FlowNode icon={House} name="Резерв" value={home === null || home < 0 ? null : home} unit="Вт" tone="home" loading={loading}
-          hint={home === null || home < 0 ? "Немає даних" : "Резервний вихід"} />
+        <div className="mt-5"><FlowLink direction={gridDirection} animate={!stale} /></div>
+        <div className="grid min-w-0 justify-items-center text-center">
+          <div className="grid size-14 place-items-center rounded-2xl border border-success/35 bg-success-surface text-success shadow-[0_0_24px_-8px_var(--success)]">
+            <Zap aria-hidden="true" className="size-6" />
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">Станція</p>
+          <p className="text-sm font-semibold">{loading ? <Skeleton className="h-4 w-12" /> : <MetricValue value={measurement?.socPct ?? null} unit="%" />}</p>
+        </div>
+        <div className="mt-5"><FlowLink direction={home !== null && home > 0 ? "right" : null} animate={!stale} /></div>
+        <FlowNode icon={House} name="Резерв" value={home === null || home < 0 ? null : home} tone="home" loading={loading}
+          hint={home === null || home < 0 ? "Немає даних" : bypass && grid !== null && grid < 0 ? "Байпас" : "Резервний вихід"} />
+        <div className="col-start-3 row-start-2 grid justify-items-center">
+          <div aria-hidden="true" className="relative flex h-7 w-px items-center justify-center bg-border text-success">
+            {battery !== null && battery !== 0 && (battery > 0 ? <ArrowDown className="size-4 shrink-0 bg-card" /> : <ArrowUp className="size-4 shrink-0 bg-card" />)}
+          </div>
+          <FlowNode icon={BatteryCharging} name="Батарея" value={battery === null ? null : Math.abs(battery)} tone="battery" loading={loading}
+            hint={battery === null ? "Немає даних" : battery > 0 ? "Заряд" : battery < 0 ? "Розряд" : "У спокої"} />
+        </div>
       </div>
+      {(chargingInput !== null || (bypass && grid !== null && grid < 0 && home !== null && home >= 0)) && (
+        <div className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+          {bypass && grid !== null && grid < 0 && home !== null && home >= 0 && (
+            <p>Мережа → резерв через байпас: <strong className="text-foreground">≈ <MetricValue value={home} unit="Вт" /></strong></p>
+          )}
+          {chargingInput !== null && (
+            <details>
+              <summary className="cursor-pointer">Детальніше про заряд</summary>
+              <p className="mt-1">На заряд: <strong className="text-foreground"><MetricValue value={chargingInput} unit="Вт" /> AC → <MetricValue value={battery} unit="Вт" /> у батарею</strong></p>
+              <p className="mt-1">Різниця: <MetricValue value={chargingDifference === null ? null : Math.abs(chargingDifference)} unit="Вт" />{chargingDifference !== null && chargingDifference < 0 && " · батарея показує більше"}. Вона може включати втрати, власне споживання і похибку.</p>
+            </details>
+          )}
+        </div>
+      )}
       <div className="grid rounded-xl bg-muted/45 px-3.5 py-3 text-sm" title="Залишок енергії поділено на поточну потужність розряду батареї">
         <div aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">
           <p>◷ &nbsp; Час роботи: &nbsp; ≈ 1 дн 9 год за поточного навантаження · орієнтовно до 14.11.26, 05:00</p>

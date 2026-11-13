@@ -60,6 +60,22 @@ function chartPath(
   return path;
 }
 
+function chartAreas(samples: TelemetrySample[], key: Series["key"], bucket: number, x: (time: number) => number, y: (value: number) => number, baseline: number) {
+  const segments: { x: number; y: number }[][] = [];
+  let previous = -Infinity;
+  for (const sample of samples) {
+    const value = sample[key];
+    if (value === null) continue;
+    const slot = Math.floor(sample.time / bucket);
+    if (slot !== previous + 1) segments.push([]);
+    segments[segments.length - 1].push({ x: x(sample.time), y: y(value) });
+    previous = slot;
+  }
+  return segments.filter((segment) => segment.length > 1).map((segment) =>
+    `M${segment[0].x} ${baseline} ${segment.map((point) => `L${point.x} ${point.y}`).join(" ")} L${segment[segment.length - 1].x} ${baseline} Z`,
+  );
+}
+
 type ChartOverlay = { background: ReactNode; now: number; emptyMessage: string };
 
 export function ScheduleChargeChart({ history, overlay }: { history: TelemetryHistory; overlay: ChartOverlay }) {
@@ -72,6 +88,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
 }) {
   const label = useId();
   const instructions = useId();
+  const gradientId = useId().replace(/:/g, "");
   const [selection, setSelection] = useState<number>();
   const { start, end, bucket, samples } = history;
   const duration = end - start;
@@ -87,6 +104,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
     return {
       x, y, ticks,
       paths: series.map(({ key }) => chartPath(samples, key, bucket, x, y)),
+      areas: series.map(({ key }) => chartAreas(samples, key, bucket, x, y, y(0))),
       available: samples.filter((sample) => series.some(({ key }) => sample[key] !== null)),
     };
   }, [unit, samples, start, duration, series, bucket]);
@@ -161,9 +179,11 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
             >
               {overlay?.background}
               <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
+                {!overlay && <defs>{series.map(({ key, color }, index) => <linearGradient key={key} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={unit === "%" ? 0.3 : 0.15} /><stop offset="100%" stopColor={color} stopOpacity="0.01" /></linearGradient>)}</defs>}
                 {plot.ticks.map((value) => (
-                  <path key={value} d={`M0 ${plot.y(value)}H1000`} stroke="var(--border)" vectorEffect="non-scaling-stroke" />
+                  <path key={value} d={`M0 ${plot.y(value)}H1000`} stroke="var(--border)" strokeDasharray="3 5" opacity="0.65" vectorEffect="non-scaling-stroke" />
                 ))}
+                {!overlay && series.map(({ key }, index) => plot.areas[index].map((path, segment) => <path key={`${key}-${segment}`} d={path} fill={`url(#${gradientId}-${index})`} />))}
                 {series.map(({ key, color }, index) => (
                   <path key={key} d={plot.paths[index]} fill="none" stroke={color} strokeWidth={1.7}
                     strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />

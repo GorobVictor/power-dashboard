@@ -24,7 +24,7 @@
   --chart-charge: #16755a;
   --chart-grid: #2364ac;
   --chart-backup: #935414;
-  --schedule-power: rgb(247 230 181);
+  --schedule-power: #d6ece6;
   --schedule-outage: #c1ccd9;
   --schedule-unknown: #e7edf3;
   --schedule-charge: #145941;
@@ -76,7 +76,7 @@
     --chart-charge: #8cd6b9;
     --chart-grid: #83baf6;
     --chart-backup: #ffcf89;
-    --schedule-power: rgb(77 62 38);
+    --schedule-power: #244743;
     --schedule-outage: #10161f;
     --schedule-unknown: #283440;
     --schedule-charge: #9de6c9;
@@ -106,7 +106,7 @@
   --chart-charge: #8cd6b9;
   --chart-grid: #83baf6;
   --chart-backup: #ffcf89;
-  --schedule-power: rgb(77 62 38);
+  --schedule-power: #244743;
   --schedule-outage: #10161f;
   --schedule-unknown: #283440;
   --schedule-charge: #9de6c9;
@@ -142,8 +142,8 @@ input[type="date"]::-webkit-date-and-time-value {
   }
 }
 
-.schedule-possible {
-  background: repeating-linear-gradient(135deg, var(--schedule-unknown) 0 4px, var(--border) 4px 6px);
+.battery-overview {
+  background-image: radial-gradient(ellipse at 15% 45%, color-mix(in srgb, var(--success-surface) 45%, transparent), transparent 65%);
 }
 
 @layer base {

@@ -163,11 +163,15 @@ test("schedule comparison distinguishes interval changes and incomplete schedule
 });
 
 test("flow summary keeps missing data and grid exchange distinct", async () => {
-  const { flowSummary, measurementAge } = await import("../src/app/dashboard/flow-status.ts");
+  const { flowSummary, measurementAge, powerDirection } = await import("../src/app/dashboard/flow-status.ts");
   assert.equal(flowSummary(null, 0, 0), "Стан батареї невідомий");
   assert.equal(flowSummary(-200, 0, 150), "Батарея розряджається · резервний вихід працює");
   assert.equal(flowSummary(100, -120, null), "Батарея заряджається · є споживання з мережі");
   assert.equal(flowSummary(0, 0, 0), "Батарея у спокої");
+  assert.equal(flowSummary(-21, -134, 134, 6), "Байпас · резервний вихід працює");
+  assert.equal(powerDirection(-134, "Від станції", "До станції"), "До станції");
+  assert.equal(powerDirection(0, "Від станції", "До станції"), "Без обміну");
+  assert.equal(powerDirection(null, "Від станції", "До станції"), "Немає даних");
   const time = "2026-01-01T00:00:00Z";
   assert.equal(measurementAge(time, Date.parse(time) + 12_000), "12 с тому");
   assert.equal(measurementAge(time, Date.parse(time) + 120_000), "2 хв тому");

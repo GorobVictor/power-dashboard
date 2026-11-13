@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, History } from "lucide-react";
+import { CalendarClock, History, ZapOff } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,10 @@ type Intervals = ReturnType<typeof outageIntervals>;
 type ChargeHistory = { history: TelemetryHistory; now: number; emptyMessage: string };
 
 const scheduleColors = {
-  power: { label: "Зі світлом", fill: "bg-[var(--schedule-power)]" },
-  outage: { label: "Без світла", fill: "bg-[var(--schedule-outage)]" },
-  possible: { label: "Можливе відключення", fill: "schedule-possible" },
-  unknown: { label: "Без даних", fill: "bg-[var(--schedule-unknown)]" },
+  power: { label: "Зі світлом", background: "var(--card)" },
+  outage: { label: "Без світла", background: "color-mix(in srgb, #9ca3af 38%, var(--card))" },
+  possible: { label: "Можливе відключення", background: "repeating-linear-gradient(135deg, var(--schedule-unknown) 0 4px, var(--border) 4px 6px)" },
+  unknown: { label: "Без даних", background: "var(--schedule-unknown)" },
 } as const;
 
 function ScheduleDate({ value }: { value: string }) {
@@ -51,7 +51,7 @@ function ScheduleIntervals({ intervals, planned, possible }: { intervals: Schedu
       {rows.filter(({ times }) => times.length).map(({ kind, times }) => (
         <div key={kind} className="contents">
           <dt className="flex max-w-28 items-baseline gap-1.5 py-0.5 text-muted-foreground min-[400px]:max-w-none">
-            <span aria-hidden="true" className={cn("size-2 shrink-0 self-start translate-y-1 rounded-xs ring-1 ring-border", scheduleColors[kind].fill)} />
+            <span aria-hidden="true" className="grid size-3.5 shrink-0 place-items-center self-start translate-y-0.5 rounded-xs text-foreground ring-1 ring-border" style={{ background: scheduleColors[kind].background }}>{kind === "outage" && <ZapOff className="size-3" />}</span>
             {kind === "possible" ? "Можливе" : scheduleColors[kind].label}
           </dt>
           <dd className="flex flex-wrap gap-x-2 gap-y-0.5 py-0.5 tabular-nums min-[400px]:gap-x-3">
@@ -73,8 +73,10 @@ function ScheduleBands({ intervals, day }: { intervals: ScheduleInterval[]; day?
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm ring-1 ring-inset ring-border">
       {bands.map(({ start, end, kind }) => (
-        <span key={start} className={cn("absolute inset-y-0", scheduleColors[kind].fill)}
-          style={{ left: `${start / duration * 100}%`, width: `${(end - start) / duration * 100}%` }} />
+        <span key={start} className="absolute inset-y-0 overflow-hidden"
+          style={{ left: `${start / duration * 100}%`, width: `${(end - start) / duration * 100}%`, background: scheduleColors[kind].background }}>
+          {kind === "outage" && <span className="absolute inset-0 flex items-center justify-center text-foreground/70"><ZapOff className="h-auto max-h-full w-full max-w-5 shrink-0" /></span>}
+        </span>
       ))}
     </div>
   );
