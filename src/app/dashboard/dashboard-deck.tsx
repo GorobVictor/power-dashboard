@@ -4,7 +4,7 @@ import { Activity, CalendarClock, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { BatteryPanel } from "./battery";
+import { BatteryPanel, EnergyCounters } from "./battery";
 import { BatteryOverview } from "./battery-overview";
 import { OutageHistoryPanel, OutagesPanel, useOutageQueue } from "./outages";
 import { PowerFlow } from "./power-flow";
@@ -102,7 +102,7 @@ export function DashboardDeck() {
         </div>
       </div>
       <div
-        className="max-lg:touch-pan-y max-lg:touch-pinch-zoom lg:flex lg:flex-col lg:gap-3"
+        className="max-lg:touch-pan-y max-lg:touch-pinch-zoom lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-stretch lg:gap-3"
         onTouchStart={(event) => {
           start.current = null;
           if (event.touches.length !== 1 || window.matchMedia("(min-width: 64rem)").matches) return;
@@ -125,25 +125,24 @@ export function DashboardDeck() {
           if (next) selectPanel(next.id);
         }}
       >
-        <div className="contents">
-          <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
-            className={cn("flex min-w-0 flex-col gap-3 lg:contents", panelClass("overview"))}>
-            <BatteryOverview className="lg:order-1" />
-            <PowerFlow className="lg:order-2" queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
-            <BatteryPanel className="lg:order-3" />
-          </div>
+        <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined} aria-owns={mobile ? "station-details" : undefined}
+          className={cn("flex min-w-0 flex-col gap-3", panelClass("overview"))}>
+          <BatteryOverview />
+          <PowerFlow className={active !== "archive" ? "lg:grow" : undefined} queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
         </div>
-        <div className="contents">
-          <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, "lg:order-4", panelClass("schedule"), active === "archive" && "lg:hidden")}>
+        <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3">
+          <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, panelClass("schedule"), active === "archive" && "lg:hidden")}>
             <OutagesPanel {...outageQueue} schedules={schedules} onHistory={() => selectPanel("archive")} />
           </section>
-          <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-4", panelClass("archive"), active !== "archive" && "lg:hidden")}>
+          <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, panelClass("archive"), active !== "archive" && "lg:hidden")}>
             <OutageHistoryPanel {...outageQueue} onBack={() => selectPanel("schedule")} />
           </section>
-          <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-5", panelClass("telemetry"))}>
-            <TelemetryPanel />
-          </section>
+          <div className={cn("min-w-0 max-lg:mt-3", active !== "archive" && "lg:grow", panelClass("overview"))}><BatteryPanel className={active !== "archive" ? "lg:h-full" : undefined} /></div>
         </div>
+        <div className="hidden lg:col-span-2 lg:block"><EnergyCounters /></div>
+        <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:col-span-2", panelClass("telemetry"))}>
+          <TelemetryPanel />
+        </section>
       </div>
     </div>
   );

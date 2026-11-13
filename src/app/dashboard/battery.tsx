@@ -73,7 +73,7 @@ export function BatteryPanel({ className }: { className?: string }) {
             </CardContent>
           ) : (
             <CardContent className="space-y-4 border-t py-4 lg:border-t-0 lg:pt-0">
-              <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <Metric label="Залишок енергії"><EnergyValue value={measurement.remainingEnergyWh} /></Metric>
                 <Metric label="Потужність батареї"><DirectionalPower value={measurement.batteryPowerW} positive="Заряд" negative="Розряд" /></Metric>
                 <Metric label="Обмін з мережею"><DirectionalPower value={measurement.gridPowerW} positive="Від станції" negative="До станції" /></Metric>
@@ -81,37 +81,57 @@ export function BatteryPanel({ className }: { className?: string }) {
                 <Metric label="Стан інвертора">{mode(measurement.inverterState, inverterStates)}</Metric>
                 <Metric label="Режим роботи">{workMode}</Metric>
               </dl>
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Лічильники енергії</h3>
-                <div className="rounded-lg border px-2.5">
-                  <table className="w-full table-fixed text-left text-xs sm:text-sm">
-                    <thead className="text-muted-foreground">
-                      <tr>
-                        <th scope="col" className="py-2 font-medium">Період</th>
-                        <th scope="col" className="py-2 text-right font-medium">Заряд</th>
-                        <th scope="col" className="py-2 text-right font-medium">Розряд</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: "За добу", input: measurement.dailyEnergyInWh, output: measurement.dailyEnergyOutWh },
-                        { label: "За місяць", input: measurement.monthlyEnergyInWh, output: measurement.monthlyEnergyOutWh },
-                        { label: "За весь час", input: measurement.totalEnergyInWh, output: measurement.totalEnergyOutWh },
-                      ].map(({ label, input, output }) => (
-                        <tr key={label} className="border-t">
-                          <th scope="row" className="py-2 font-medium">{label}</th>
-                          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={input} /></td>
-                          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={output} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <div className="space-y-2 lg:hidden"><h3 className="text-sm font-semibold">Лічильники енергії</h3><EnergyCountersContent /></div>
             </CardContent>
           )}
         </div>
       </div>
     </Card>
   );
+}
+
+function EnergyCountersContent() {
+  const { station } = useDashboardLive();
+  const measurement = station?.kind === "station" ? station.measurement : null;
+  if (!measurement) return null;
+  return (
+    <div className="rounded-lg border px-2.5">
+      <table className="w-full table-fixed text-left text-xs sm:text-sm">
+        <thead className="text-muted-foreground"><tr>
+          <th scope="col" className="py-2 font-medium">Період</th>
+          <th scope="col" className="py-2 text-right font-medium">Заряд</th>
+          <th scope="col" className="py-2 text-right font-medium">Розряд</th>
+        </tr></thead>
+        <tbody>{[
+          { label: "За добу", input: measurement.dailyEnergyInWh, output: measurement.dailyEnergyOutWh },
+          { label: "За місяць", input: measurement.monthlyEnergyInWh, output: measurement.monthlyEnergyOutWh },
+          { label: "За весь час", input: measurement.totalEnergyInWh, output: measurement.totalEnergyOutWh },
+        ].map(({ label, input, output }) => <tr key={label} className="border-t">
+          <th scope="row" className="py-2 font-medium">{label}</th>
+          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={input} /></td>
+          <td className="py-2 pl-2 text-right wrap-anywhere"><EnergyValue value={output} /></td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+export function EnergyCounters() {
+  const { station } = useDashboardLive();
+  if (station?.kind !== "station" || !station.measurement) return null;
+  const measurement = station.measurement;
+  const periods = [
+    { label: "За добу", input: measurement.dailyEnergyInWh, output: measurement.dailyEnergyOutWh },
+    { label: "За місяць", input: measurement.monthlyEnergyInWh, output: measurement.monthlyEnergyOutWh },
+    { label: "За весь час", input: measurement.totalEnergyInWh, output: measurement.totalEnergyOutWh },
+  ];
+  return <Card className="hidden gap-3 py-4 lg:flex">
+    <CardHeader><h2 className="text-base font-semibold tracking-tight sm:text-lg">Лічильники енергії</h2></CardHeader>
+    <CardContent><dl className="grid grid-cols-3 gap-3">{periods.map(({ label, input, output }) => (
+      <div key={label} className="rounded-lg bg-muted/55 px-3 py-2.5">
+        <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+        <dd className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span><span className="text-muted-foreground">Заряд </span><strong><EnergyValue value={input} /></strong></span><span><span className="text-muted-foreground">Розряд </span><strong><EnergyValue value={output} /></strong></span></dd>
+      </div>
+    ))}</dl></CardContent>
+  </Card>;
 }
