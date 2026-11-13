@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sealData } from "iron-session";
 import { dischargeMinutes, formatDischargeTime } from "../src/app/dashboard/battery-runtime.ts";
 import { clockTime, outageIntervals, scheduleIntervals } from "../src/server/outages/intervals.ts";
 import { addTelemetrySample, shiftTelemetryDate, telemetryWindow } from "../src/lib/telemetry-history.ts";
 import { matchesCredentials, matchesDashboardCredentials } from "../src/server/credentials.ts";
 import {
   createDashboardSession,
+  createDashboardRefresh,
   dashboardAuthConfig,
+  isDashboardRefreshValid,
   isDashboardSessionValid,
+  isLegacyDashboardSession,
+  refreshCookieOptions,
   sessionCookieOptions,
 } from "../src/server/dashboard-session.ts";
 
@@ -17,6 +22,29 @@ test("dashboard login ignores username case while passwords and API credentials 
   assert.equal(matchesDashboardCredentials("user@example.com", "secret", credentials), false);
   assert.equal(matchesDashboardCredentials("other@example.com", "Secret", credentials), false);
   assert.equal(matchesCredentials("user@example.com", "Secret", credentials), false);
+});
+
+test("refresh tokens have a separate type and five-day sliding lifetime", async () => {
+  process.env.API_USERNAME = "dashboard";
+  process.env.API_PASSWORD = "fixture-password";
+  process.env.DASHBOARD_SESSION_SECRET = "a".repeat(64);
+  const config = dashboardAuthConfig()!;
+  const now = Date.now();
+  const fiveDays = 5 * 24 * 60 * 60 * 1_000;
+  const refresh = await createDashboardRefresh(config.key, now);
+  const access = await createDashboardSession(config.key, now);
+  assert.equal(await isDashboardRefreshValid(refresh, config.key, now + fiveDays - 1), true);
+  assert.equal(await isDashboardRefreshValid(refresh, config.key, now + fiveDays), false);
+  assert.equal(await isDashboardSessionValid(refresh, config.key, now), false);
+  assert.equal(await isDashboardRefreshValid(access, config.key, now), false);
+  assert.equal(await isLegacyDashboardSession(access, config.key), false);
+  const legacy = await sealData({ expiresAt: now + 8 * 60 * 60 * 1_000 }, { password: config.key, ttl: 8 * 60 * 60 });
+  assert.equal(await isLegacyDashboardSession(legacy, config.key), true);
+  assert.equal(await isDashboardRefreshValid(legacy, config.key, now), false);
+  assert.equal(await isDashboardRefreshValid(refresh, "b".repeat(64), now), false);
+  const renewed = await createDashboardRefresh(config.key, now + fiveDays - 1);
+  assert.equal(await isDashboardRefreshValid(renewed, config.key, now + fiveDays + 1), true);
+  assert.equal(refreshCookieOptions().maxAge, 5 * 24 * 60 * 60);
 });
 
 test("dashboard sessions expire, reject tampering, and follow credential rotation", async () => {

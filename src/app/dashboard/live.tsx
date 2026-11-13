@@ -111,10 +111,44 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
 
     let socket: WebSocket;
     let reconnectTimer: number | undefined;
+    let refreshRetryTimer: number | undefined;
+    let refreshing: Promise<"ok" | "unauthorized" | "retry"> | undefined;
     const url = new URL(dashboardSocketPath, window.location.href);
     url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+    function refresh() {
+      refreshing ??= fetch("/api/session/refresh", { method: "POST", cache: "no-store" })
+        .then((response) => response.ok ? "ok" as const : response.status === 401 ? "unauthorized" as const : "retry" as const)
+        .catch(() => "retry" as const)
+        .finally(() => { refreshing = undefined; });
+      return refreshing;
+    }
+
+    async function maintainSession() {
+      if (disposed || document.visibilityState !== "visible") return;
+      const result = await refresh();
+      if (disposed) return;
+      if (result === "unauthorized") {
+        window.location.replace("/login");
+        return;
+      }
+      if (result === "retry") {
+        window.clearTimeout(refreshRetryTimer);
+        refreshRetryTimer = window.setTimeout(() => void maintainSession(), 30_000);
+      } else {
+        window.clearTimeout(refreshRetryTimer);
+        if (socket.readyState === WebSocket.CLOSED) connect();
+      }
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") void maintainSession();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const refreshTimer = window.setInterval(() => void maintainSession(), 60 * 60 * 1_000);
+
     function connect() {
+      window.clearTimeout(reconnectTimer);
       socket = new WebSocket(url);
       sendRequest.current = (message) => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -126,7 +160,8 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
         if (disposed) return;
         sendRequest.current = null;
         if (code === dashboardSessionExpired) {
-          window.location.replace("/login");
+          setConnection("disconnected");
+          void maintainSession();
           return;
         }
         setConnection("disconnected");
@@ -141,6 +176,9 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
       disposed = true;
       sendRequest.current = null;
       window.clearTimeout(reconnectTimer);
+      window.clearInterval(refreshTimer);
+      window.clearTimeout(refreshRetryTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       socket.close();
     };
   }, [mock]);

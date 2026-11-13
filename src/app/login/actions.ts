@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { matchesDashboardCredentials } from "@/server/credentials";
 import {
   createDashboardSession,
+  createDashboardRefresh,
   dashboardAuthConfig,
+  refreshCookieName,
+  refreshCookieOptions,
   sessionCookieName,
   sessionCookieOptions,
 } from "@/server/dashboard-session";
@@ -23,11 +26,13 @@ export async function signIn(_previous: string | null, form: FormData) {
 
   const cookieStore = await cookies();
   cookieStore.set(sessionCookieName, await createDashboardSession(config.key), sessionCookieOptions());
+  cookieStore.set(refreshCookieName, await createDashboardRefresh(config.key), refreshCookieOptions());
   redirect("/");
 }
 
 export async function signOut() {
   const cookieStore = await cookies();
   cookieStore.set(sessionCookieName, "", { ...sessionCookieOptions(), maxAge: 0 });
+  cookieStore.set(refreshCookieName, "", { ...refreshCookieOptions(), maxAge: 0 });
   redirect("/login");
 }
