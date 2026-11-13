@@ -73,7 +73,7 @@ export function BatteryPanel({ className }: { className?: string }) {
             </CardContent>
           ) : (
             <CardContent className="space-y-4 border-t py-4 lg:border-t-0 lg:pt-0">
-              <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 <Metric label="Залишок енергії"><EnergyValue value={measurement.remainingEnergyWh} /></Metric>
                 <Metric label="Потужність батареї"><DirectionalPower value={measurement.batteryPowerW} positive="Заряд" negative="Розряд" /></Metric>
                 <Metric label="Обмін з мережею"><DirectionalPower value={measurement.gridPowerW} positive="Від станції" negative="До станції" /></Metric>

@@ -16,7 +16,7 @@ const panels = [
   { id: "telemetry", controls: "station-telemetry", label: "Виміри", icon: Activity },
 ] as const;
 
-const panelFrame = "min-w-0 lg:grid";
+const panelFrame = "min-w-0";
 const panelStorageKey = "power-dashboard.active-panel";
 type Panel = typeof panels[number]["id"] | "archive";
 
@@ -72,7 +72,7 @@ export function DashboardDeck() {
     } catch {
       // The in-memory selection still works if browser storage is unavailable.
     }
-    if (active !== panel) window.scrollTo({ top: 0, behavior: "instant" });
+    if (mobile && active !== panel) window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   return (
@@ -102,7 +102,7 @@ export function DashboardDeck() {
         </div>
       </div>
       <div
-        className="max-lg:touch-pan-y max-lg:touch-pinch-zoom lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-3"
+        className="max-lg:touch-pan-y max-lg:touch-pinch-zoom lg:flex lg:flex-col lg:gap-3"
         onTouchStart={(event) => {
           start.current = null;
           if (event.touches.length !== 1 || window.matchMedia("(min-width: 64rem)").matches) return;
@@ -125,21 +125,25 @@ export function DashboardDeck() {
           if (next) selectPanel(next.id);
         }}
       >
-        <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
-          className={cn("max-lg:flex max-lg:flex-col max-lg:gap-3 lg:contents", panelClass("overview"))}>
-          <BatteryOverview className="lg:order-1" />
-          <div className={cn(panelFrame, "lg:order-1")}><PowerFlow queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /></div>
-          <BatteryPanel className="lg:order-4" />
+        <div className="contents">
+          <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined}
+            className={cn("flex min-w-0 flex-col gap-3 lg:contents", panelClass("overview"))}>
+            <BatteryOverview className="lg:order-1" />
+            <PowerFlow className="lg:order-2" queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
+            <BatteryPanel className="lg:order-3" />
+          </div>
         </div>
-        <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-2", panelClass("telemetry"))}>
-          <TelemetryPanel />
-        </section>
-        <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, "lg:order-3", panelClass("schedule"))}>
-          <OutagesPanel {...outageQueue} schedules={schedules} onHistory={() => selectPanel("archive")} />
-        </section>
-        <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-5", panelClass("archive"))}>
-          <OutageHistoryPanel {...outageQueue} onBack={() => selectPanel("schedule")} />
-        </section>
+        <div className="contents">
+          <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, "lg:order-4", panelClass("schedule"), active === "archive" && "lg:hidden")}>
+            <OutagesPanel {...outageQueue} schedules={schedules} onHistory={() => selectPanel("archive")} />
+          </section>
+          <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, "lg:order-4", panelClass("archive"), active !== "archive" && "lg:hidden")}>
+            <OutageHistoryPanel {...outageQueue} onBack={() => selectPanel("schedule")} />
+          </section>
+          <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:order-5", panelClass("telemetry"))}>
+            <TelemetryPanel />
+          </section>
+        </div>
       </div>
     </div>
   );

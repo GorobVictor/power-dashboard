@@ -60,7 +60,7 @@ function MeasurementTime({ measuredAt, initialNow }: { measuredAt: string; initi
   return <details className="w-36 text-xs text-muted-foreground"><summary className="cursor-pointer">Оновлено {measurementAge(measuredAt, Math.max(now, initialNow))}</summary><span className="block pt-1">Київський час: <Timestamp value={measuredAt} /></span></details>;
 }
 
-export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | null; schedules: DashboardSchedule[]; onSchedule: () => void }) {
+export function PowerFlow({ queue, schedules, onSchedule, className }: { queue: string | null; schedules: DashboardSchedule[]; onSchedule: () => void; className?: string }) {
   const { station, stationStale, connection, outages, outagesStale, today, now } = useDashboardLive();
   const loading = !station && connection === "connecting";
   const current = station?.kind === "station" ? station : null;
@@ -98,9 +98,9 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
     : stale ? "Останній відомий стан" : "Актуальні дані";
 
   return (
-    <Card aria-busy={loading} className={cn("power-flow gap-4 px-4 py-5 sm:px-5", mobilePanelClassName)}>
+    <Card aria-busy={loading} className={cn("power-flow gap-4 px-4 py-5 sm:px-5 lg:grid lg:grid-cols-2 lg:items-start", mobilePanelClassName, className)}>
       {loading && <span role="status" className="sr-only">Завантаження потоку енергії</span>}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 lg:col-span-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-success-surface text-success">
             <Zap aria-hidden="true" className="size-4" />
@@ -115,13 +115,12 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
           {loading ? <Skeleton className="h-3 w-36" /> : measurement && <MeasurementTime measuredAt={measurement.measuredAt} initialNow={now} />}
         </div>
       </div>
-      <div className="grid text-sm font-medium">
-        <p aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">Батарея розряджається · резервний вихід працює</p>
+      <div className="grid text-sm font-medium lg:col-span-2">
         <p className={cn("col-start-1 row-start-1", stale ? "text-muted-foreground" : "text-foreground")}>
           {loading ? <Skeleton className="mt-1 h-4 w-4/5" /> : measurement && (stale ? "Показано останні відомі значення" : flowSummary(battery, grid, home, measurement.inverterState))}
         </p>
       </div>
-      <div className="mx-auto grid w-full max-w-lg grid-cols-[minmax(0,1fr)_clamp(12px,5vw,32px)_minmax(70px,0.8fr)_clamp(12px,5vw,32px)_minmax(0,1fr)] items-start pt-1">
+      <div className="mx-auto grid w-full max-w-lg grid-cols-[minmax(0,1fr)_clamp(12px,5vw,32px)_minmax(70px,0.8fr)_clamp(12px,5vw,32px)_minmax(0,1fr)] items-start pt-1 lg:row-span-3 lg:self-center">
         <FlowNode icon={UtilityPole} name="Мережа" value={grid === null ? null : Math.abs(grid)} tone="grid" loading={loading}
           hint={grid === null ? "Немає даних" : grid < 0 ? "До станції" : grid > 0 ? "Від станції" : "Без обміну"} />
         <div className="mt-5"><FlowLink direction={gridDirection} animate={!stale} /></div>
@@ -144,7 +143,7 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
         </div>
       </div>
       {(chargingInput !== null || (bypass && grid !== null && grid < 0 && home !== null && home >= 0)) && (
-        <div className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+        <div className="border-t pt-3 text-xs leading-relaxed text-muted-foreground lg:col-start-2">
           {bypass && grid !== null && grid < 0 && home !== null && home >= 0 && (
             <p>Мережа → резерв через байпас: <strong className="text-foreground">≈ <MetricValue value={home} unit="Вт" /></strong></p>
           )}
@@ -157,11 +156,7 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
           )}
         </div>
       )}
-      <div className="grid rounded-xl bg-muted/45 px-3.5 py-3 text-sm" title="Залишок енергії поділено на поточну потужність розряду батареї">
-        <div aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">
-          <p>◷ &nbsp; Час роботи: &nbsp; ≈ 1 дн 9 год за поточного навантаження · орієнтовно до 14.11.26, 05:00</p>
-          <p className="mt-1">Навантаження може змінитися. За поточним графіком заряд може закінчитися до кінця відключення.</p>
-        </div>
+      <div className="grid rounded-xl bg-muted/45 px-3.5 py-3 text-sm lg:col-start-2" title="Залишок енергії поділено на поточну потужність розряду батареї">
         <div className="col-start-1 row-start-1">
         {loading ? <div className="space-y-2"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-4/5" /></div> : <>
         <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
@@ -175,8 +170,7 @@ export function PowerFlow({ queue, schedules, onSchedule }: { queue: string | nu
         </>}
         </div>
       </div>
-      <button type="button" onClick={onSchedule} className={cn("grid min-h-12 rounded-xl border bg-background/70 px-3.5 py-3 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring", queue && (!scheduleFresh || schedule?.status === "EmergencyShutdowns" || schedule?.hours.includes(9)) && "border-warning/45 bg-warning-surface/45")}>
-        <span aria-hidden="true" className="invisible col-start-1 row-start-1 max-lg:hidden">Черга 3.2 · Графік неактуальний або недоступний →</span>
+      <button type="button" onClick={onSchedule} className={cn("grid min-h-12 rounded-xl border bg-background/70 px-3.5 py-3 text-left text-sm outline-none lg:col-start-2 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring", queue && (!scheduleFresh || schedule?.status === "EmergencyShutdowns" || schedule?.hours.includes(9)) && "border-warning/45 bg-warning-surface/45")}>
         <span className="col-start-1 row-start-1">{loading ? <Skeleton className="h-4 w-3/4" /> : <><span className="font-semibold">{queue ? `Черга ${queue}` : "Графік відключень"}</span>{" · "}
         {!queue ? "Оберіть чергу" : !scheduleFresh ? "Графік неактуальний або недоступний" : !schedule ? "Графік на сьогодні недоступний" : schedule.status === "NoShutdowns" ? "Сьогодні без відключень" : schedule.status === "EmergencyShutdowns" || schedule.hours.includes(9) ? "Аварійні обмеження" : !completePlan ? "Графік неповний або очікується" : next ? ongoing ? `Відключення до ${clockTime(next.end)}` : `Наступне: ${clockTime(next.start)}–${clockTime(next.end)}` : "Сьогодні більше без відключень"}
         <span className="ml-1 text-muted-foreground">→</span></>}</span>

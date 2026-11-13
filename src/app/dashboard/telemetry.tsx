@@ -139,7 +139,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
         </div>
       ) : (
         <>
-          {available.length > 0 && <p id={instructions} className="mb-3 text-xs text-muted-foreground">Торкніться графіка або проведіть по ньому, щоб переглянути виміри. На клавіатурі використовуйте стрілки.</p>}
+          {available.length > 0 && <p id={instructions} className="mb-3 text-xs text-muted-foreground">Торкніться графіка або використовуйте стрілки, щоб переглянути виміри.</p>}
           <div className={cn("grid min-w-0 gap-x-1.5", overlay ? "grid-cols-[1.55rem_minmax(0,1fr)]" : "grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3.15rem_minmax(0,1fr)]")}>
             <div aria-hidden="true" className="relative text-right text-xs text-muted-foreground tabular-nums">
               {plot.ticks.map((value) => (

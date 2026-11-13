@@ -276,14 +276,13 @@ export function OutagesPanel({ schedules, onHistory, ...filter }: QueueFilter & 
             </span>
             Відключення
           </h2>
-          <div className="flex items-center gap-1"><QueuePicker {...filter} compact /><Button type="button" variant="ghost" onClick={onHistory} className="lg:hidden">Історія змін</Button></div>
+          <div className="flex items-center gap-1"><QueuePicker {...filter} compact /><Button type="button" variant="ghost" onClick={onHistory} aria-label="Історія змін" title="Історія змін" className="size-11 px-0 sm:w-auto sm:px-3"><History aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Історія змін</span></Button></div>
         </div>
         {!!dates.length && <ScheduleTabs id={tabsId} dates={dates} active={day} select={setSelectedDate} />}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2.5">
         {!day && <p role="status" className="text-sm text-muted-foreground">Очікуємо графіки від джерела…</p>}
-        {/* On desktop, every date contributes to the shared row height. */}
-        <div className="lg:grid">
+        <div>
           {dates.map((date) => {
             const active = day === date;
             const visible = queueSchedules.filter((schedule) => schedule.date === date);
@@ -292,8 +291,8 @@ export function OutagesPanel({ schedules, onHistory, ...filter }: QueueFilter & 
             return (
               <div key={date} id={`${tabsId}-day-${date}`} role="tabpanel" aria-labelledby={`${tabsId}-tab-${date}`}
                 inert={!active} tabIndex={active ? 0 : undefined}
-                className={cn("min-w-0 space-y-2.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring lg:col-start-1 lg:row-start-1 lg:self-start",
-                  !active && "hidden lg:invisible lg:block")}>
+                className={cn("min-w-0 space-y-2.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  !active && "hidden")}>
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                   <p className="text-xs text-muted-foreground first-letter:uppercase"><ScheduleDate value={date} /></p>
                   {queue !== null && visible[0] && <ScheduleStatus status={visible[0].status} />}
@@ -399,7 +398,7 @@ export function OutageHistoryPanel({ onBack, ...filter }: QueueFilter & { onBack
           </span>
           Історія відключень
         </h2>
-        <Button type="button" variant="ghost" onClick={onBack} className="w-fit lg:hidden">← До графіка</Button>
+        <Button type="button" variant="ghost" onClick={onBack} className="w-fit">← До графіка</Button>
         <QueuePicker {...filter} />
       </CardHeader>
       <CardContent className="space-y-2.5">
