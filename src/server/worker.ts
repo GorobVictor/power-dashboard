@@ -5,6 +5,7 @@ import { createLogger, errorFields, errorMessage } from "./logger.ts";
 import { collectOutageSchedules } from "./outages/collector.ts";
 import { collectDtekSchedules } from "./outages/dtek-collector.ts";
 import { outageSourceName } from "./outages/repository.ts";
+import { collectPower } from "./power/monitor.ts";
 import { collectStation } from "./stations/collector.ts";
 import { listEnabledStations } from "./stations/repository.ts";
 import type { BatteryNotificationOptions } from "./telegram/battery.ts";
@@ -65,6 +66,7 @@ try {
 }
 
 const collectors = [
+  collectPower(shutdown.signal, !!telegram),
   runMarstek(shutdown.signal, telegram ?? undefined),
   outageSourceName() === "dtek"
     ? collectDtekSchedules(shutdown.signal, telegram?.outageQueue, !!telegram)

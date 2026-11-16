@@ -9,6 +9,7 @@ import { shiftTelemetryDate, telemetryPeriods, type TelemetryHistory, type Telem
 import { cn } from "@/lib/utils";
 import { isScheduleDate, timeZone } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
+import { PowerChartLegend, PowerChartOverlay } from "./power-timeline";
 import { mobilePanelClassName, Timestamp } from "./panel";
 
 type Series = { key: Exclude<keyof TelemetrySample, "time">; label: string; color: string };
@@ -133,12 +134,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
           </span>
         )}
       </figcaption>
-      {available.length === 0 && !overlay ? (
-        <div className="grid h-43 place-items-center rounded-lg border border-dashed text-center text-sm text-muted-foreground sm:h-52 lg:h-44 xl:h-52">
-          Немає показників за цей період
-        </div>
-      ) : (
-        <>
+      <>
           {available.length > 0 && <p id={instructions} className="mb-3 text-xs text-muted-foreground">Торкніться графіка або використовуйте стрілки, щоб переглянути виміри.</p>}
           <div className={cn("grid min-w-0 gap-x-1.5", overlay ? "grid-cols-[1.55rem_minmax(0,1fr)]" : "grid-cols-[2.5rem_minmax(0,1fr)] sm:grid-cols-[3.15rem_minmax(0,1fr)]")}>
             <div aria-hidden="true" className="relative text-right text-xs text-muted-foreground tabular-nums">
@@ -178,6 +174,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
               }}
             >
               {overlay?.background}
+              <PowerChartOverlay start={start} end={end} />
               <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
                 {!overlay && <defs>{series.map(({ key, color }, index) => <linearGradient key={key} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={unit === "%" ? 0.3 : 0.15} /><stop offset="100%" stopColor={color} stopOpacity="0.01" /></linearGradient>)}</defs>}
                 {plot.ticks.map((value) => (
@@ -241,8 +238,9 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
               </p>
             </div>
           )}
+          {available.length === 0 && !overlay && <p role="status" className="mt-1.5 text-xs text-muted-foreground">Немає показників за цей період</p>}
         </>
-      )}
+      <PowerChartLegend start={start} end={end} selected={active?.time} compact={Boolean(overlay)} />
     </figure>
   );
 }
@@ -275,6 +273,13 @@ export function TelemetryPanel() {
     ? telemetry : undefined;
   const history = response?.value;
   const calendar = selection?.period === "dates";
+  const historyStart = history?.start;
+  const historyEnd = history?.end;
+  useEffect(() => {
+    if (calendar && historyStart !== undefined && historyEnd !== undefined && connection === "connected" && historySupported) {
+      request({ type: "powerHistory", start: historyStart, end: historyEnd });
+    }
+  }, [calendar, historyStart, historyEnd, connection, historySupported, request, revision]);
   const rangeLabel = filter.period === "dates" && fullDateFormat.formatRange(new Date(filter.from), new Date(filter.to));
   const message = station?.kind === "unconfigured" || station?.kind === "missing" ? "Історія з’явиться після налаштування станції."
     : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."

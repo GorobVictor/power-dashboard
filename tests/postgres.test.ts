@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { runner } from "node-pg-migrate";
 import { Client } from "pg";
+import { savePowerState } from "../src/server/power/monitor.ts";
+import { readPower } from "../src/server/power/repository.ts";
 import { decodeState } from "../src/server/marstek/protocol.ts";
 import { findCurrentSchedules, findScheduleHistory, lockOutageSource, saveOutagePoll } from "../src/server/outages/repository.ts";
 import type { Schedule } from "../src/server/outages/schedules.ts";
@@ -40,10 +42,31 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     await registerStation(db, first);
     await registerStation(db, second);
     await db.query("INSERT INTO measurements (station_id, measured_at, work_mode) VALUES ($1, '2025-12-31T00:00:00Z', 1)", [first.id]);
-    assert.equal((await migrate()).length, 1);
+    assert.equal((await migrate()).length, 2);
     assert.equal((await findLatest(db, first.id))?.measurement?.upsEnabled, null);
     assert.equal(await findLatest(db, "missing"), null);
     assert.equal((await findLatest(db, second.id))?.measurement, null);
+
+    await t.test("power transitions preserve observations and queue alerts once", async () => {
+      const at = new Date();
+      let state = await savePowerState(db, undefined, "online", at, true, at, 30_000, true);
+      assert.equal((await db.query("SELECT count(*)::int AS n FROM telegram_outbox")).rows[0].n, 0);
+      const later = new Date(at.getTime() + 1000);
+      state = await savePowerState(db, state, "online", later, true);
+      assert.equal((await readPower(db))?.lastOnlineAt, at.toISOString());
+      state = await savePowerState(db, state, "offline", later, true);
+      state = await savePowerState(db, state, "unknown", new Date(later.getTime() + 1000), true);
+      state = await savePowerState(db, state, "offline", new Date(later.getTime() + 2000), true);
+      assert.equal((await readPower(db))?.lastOfflineAt, later.toISOString());
+      await savePowerState(db, state, "online", new Date(later.getTime() + 3000), true, undefined, 30_000, true);
+      const result = await readPower(db);
+      assert.equal(result?.status, "online");
+      assert.deepEqual(result?.events.map((event) => event.status), ["online", "offline", "unknown", "offline", "online"]);
+      const messages = await db.query("DELETE FROM telegram_outbox RETURNING message");
+      assert.equal(messages.rowCount, 2);
+      assert.match(messages.rows[0].message, /зникло/);
+      assert.match(messages.rows[1].message, /зʼявилося/);
+    });
 
     const metrics = { ...decodeState(Buffer.alloc(139)), upsEnabled: null };
     const old = { ...metrics, socPct: 18, measuredAt: new Date("2026-01-01T00:00:00Z") };

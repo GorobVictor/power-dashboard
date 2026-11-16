@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { clockTime, kyivMinute, minutesPerDay, outageIntervals, outageQueues, scheduleBands, scheduleIntervals, type ScheduleInterval } from "@/server/outages/intervals";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
+import { PowerChartLegend, PowerChartOverlay } from "./power-timeline";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
 import { compareSchedules } from "./schedule-insights";
 import { ScheduleChargeChart } from "./telemetry";
@@ -83,10 +84,13 @@ function ScheduleBands({ intervals, day }: { intervals: ScheduleInterval[]; day?
 }
 
 function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; now?: number }) {
+  const { today } = useDashboardLive();
+  const day = now !== undefined && today ? telemetryWindow({ from: today, to: today }) : null;
   return (
     <div className="space-y-1">
       <div aria-hidden="true" className="relative h-4">
         <ScheduleBands intervals={intervals} />
+        {day && <PowerChartOverlay start={day.start} end={day.end} />}
         {now !== undefined && (
           <span title="Зараз" className="absolute inset-y-0 border-l border-dashed border-foreground"
             style={{ left: `${now / minutesPerDay * 100}%` }} />
@@ -95,6 +99,7 @@ function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; n
       <div className="flex justify-between text-[0.625rem] text-muted-foreground tabular-nums" aria-hidden="true">
         <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
       </div>
+      {day && <PowerChartLegend start={day.start} end={day.end} compact flush />}
     </div>
   );
 }

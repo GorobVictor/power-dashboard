@@ -24,6 +24,8 @@ EXPOSE 3000
 CMD ["node", "src/server/web.ts"]
 
 FROM base AS worker
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN --mount=type=tmpfs,target=/root/.npm npm ci --omit=dev --omit=optional

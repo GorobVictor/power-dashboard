@@ -18,14 +18,28 @@ export type DashboardOutages = {
   staleAfterMs: number;
 };
 
+export type DashboardPower = {
+  status: "online" | "offline" | "unknown";
+  checkedAt: string;
+  staleAfterMs: number;
+  lastOnlineAt: string | null;
+  lastOfflineAt: string | null;
+  events: { status: "online" | "offline" | "unknown"; observedAt: string }[];
+};
+
+export type PowerEvent = DashboardPower["events"][number];
+
 type TelemetryRequest = { type: "telemetry" } & TelemetrySelection;
 
 export type DashboardRequest =
   | TelemetryRequest
+  | { type: "powerHistory"; start: number; end: number }
   | { type: "chargeHistory"; date: string }
   | { type: "outageHistory"; date: string; queue: string | null };
 
 export type DashboardMessage =
+  | { type: "power"; value: DashboardPower | null }
+  | { type: "powerHistory"; start: number; end: number; value: PowerEvent[] | null }
   | { type: "station"; value: DashboardStation }
   | { type: "outages"; value: DashboardOutages; schedulesChanged: boolean }
   | (TelemetryRequest & { value: TelemetryHistory | null })

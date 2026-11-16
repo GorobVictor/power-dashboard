@@ -86,6 +86,8 @@ services:
       target: worker
     init: true
     cap_drop: [ALL]
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
     security_opt:
       - apparmor=unconfined
     environment:
@@ -93,6 +95,8 @@ services:
       DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
       BLE_ADAPTER: ${BLE_ADAPTER:-hci0}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-1000}
+      POWER_MONITOR_IP: ${POWER_MONITOR_IP:-}
+      POWER_POLL_INTERVAL_MS: ${POWER_POLL_INTERVAL_MS:-1000}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_DTEK_QUEUE: ${TELEGRAM_DTEK_QUEUE:-}

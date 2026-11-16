@@ -1,16 +1,18 @@
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
-import type { DashboardMessage, DashboardOutages, DashboardStation } from "../lib/dashboard-feed.ts";
+import type { DashboardMessage, DashboardOutages, DashboardStation, DashboardPower } from "../lib/dashboard-feed.ts";
 import { databaseClient } from "./db.ts";
 import { createLogger, errorFields } from "./logger.ts";
 import { findCurrentSchedules, outageSourceId } from "./outages/repository.ts";
 import { kyivDate } from "./outages/schedules.ts";
 import { outageStaleAfterMs } from "./outages/service.ts";
+import { readPower } from "./power/repository.ts";
 import { findLatest } from "./stations/repository.ts";
 import { stationStaleAfterMs } from "./stations/service.ts";
 import type { SerializedMeasurement } from "./stations/types.ts";
 
 type Update =
+  | { type: "power" }
   | { type: "measurement"; stationId: string; measurement: SerializedMeasurement }
   | { type: "station"; stationId: string }
   | { type: "outages"; source: string; lastSuccessfulPollAt: string; schedulesChanged: boolean };
@@ -23,9 +25,11 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
   const staleAfterMs = stationId ? stationStaleAfterMs() : 0;
   let station: DashboardStation | undefined = stationId ? undefined : { kind: "unconfigured" };
   let outages: DashboardOutages | undefined;
+  let power: DashboardPower | null | undefined;
   let connected: boolean | undefined;
 
   function snapshot(send: typeof publish) {
+    if (power !== undefined) send({ type: "power", value: power });
     if (station) send({ type: "station", value: station });
     if (outages) send({ type: "outages", value: outages, schedulesChanged: true });
     if (connected !== undefined) send({ type: "status", connected, history: true });
@@ -72,7 +76,10 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
         }
         updates = updates.then(async () => {
           if (lost.signal.aborted || signal.aborted) return;
-          if (update?.type === "outages" && update.source === outageSourceId()) {
+          if (update?.type === "power") {
+            power = await readPower(db);
+            publish({ type: "power", value: power });
+          } else if (update?.type === "outages" && update.source === outageSourceId()) {
             const observedAt = Date.parse(update.lastSuccessfulPollAt);
             if (!Number.isFinite(observedAt)) return;
             if (!outages || update.schedulesChanged) {
@@ -100,6 +107,7 @@ export function dashboardFeed(publish: (message: DashboardMessage) => void, sign
         updates = db.query(`LISTEN ${channel}`).then(async () => {
           const initialStation = await readStation();
           const initialOutages = await readOutages();
+          power = await readPower(db);
           station = initialStation;
           outages = initialOutages;
           connected = true;

@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardOutages, type DashboardRequest, type DashboardStation } from "@/lib/dashboard-feed";
+import { dashboardSessionExpired, dashboardSocketPath, type DashboardMessage, type DashboardPower, type DashboardOutages, type DashboardRequest, type DashboardStation } from "@/lib/dashboard-feed";
 import { addTelemetrySample, telemetrySample } from "@/lib/telemetry-history";
 import { kyivDate } from "@/server/outages/schedules";
 
 type Connection = "connecting" | "connected" | "disconnected";
 type DashboardLiveState = {
   connection: Connection;
+  power: DashboardPower | null | undefined;
   station: DashboardStation | undefined;
   stationStale: boolean;
   outages: DashboardOutages | undefined;
@@ -18,6 +19,7 @@ type DashboardLiveState = {
   revision: number;
   schedulesRevision: number;
   telemetry: Extract<DashboardMessage, { type: "telemetry" }> | undefined;
+  powerHistory: Extract<DashboardMessage, { type: "powerHistory" }> | undefined;
   chargeHistory: Extract<DashboardMessage, { type: "chargeHistory" }> | undefined;
   outageHistory: Extract<DashboardMessage, { type: "outageHistory" }> | undefined;
   request: (request: DashboardRequest) => void;
@@ -27,9 +29,11 @@ const DashboardContext = createContext<DashboardLiveState | null>(null);
 const minuteMs = 60_000;
 
 export function DashboardLive({ children, mock }: { children: ReactNode; mock: boolean }) {
+  const [power, setPower] = useState<DashboardPower | null>();
   const [station, setStation] = useState<DashboardStation>();
   const [outages, setOutages] = useState<DashboardOutages>();
   const [telemetry, setTelemetry] = useState<DashboardLiveState["telemetry"]>();
+  const [powerHistory, setPowerHistory] = useState<DashboardLiveState["powerHistory"]>();
   const [chargeHistory, setChargeHistory] = useState<DashboardLiveState["chargeHistory"]>();
   const [outageHistory, setOutageHistory] = useState<DashboardLiveState["outageHistory"]>();
   const [connection, setConnection] = useState<Connection>("connecting");
@@ -49,6 +53,7 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
 
     function receive(message: DashboardMessage) {
       switch (message.type) {
+        case "power": setPower(message.value); break;
         case "station": {
           setStation(message.value);
           if (message.value.kind === "station" && message.value.measurement) {
@@ -71,6 +76,7 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
           if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
           break;
         case "telemetry": setTelemetry(message); break;
+        case "powerHistory": setPowerHistory(message); break;
         case "chargeHistory": setChargeHistory(message); break;
         case "outageHistory": setOutageHistory(message); break;
         case "status":
@@ -87,13 +93,14 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
 
     if (mock) {
       let timer: number | undefined;
-      void import("./mock-feed").then(({ mockStation, mockOutages, mockHistory }) => {
+      void import("./mock-feed").then(({ mockStation, mockOutages, mockHistory, mockPower }) => {
         if (disposed) return;
         let previousDate = "";
         const publish = () => {
           const now = Date.now();
           const today = kyivDate(new Date(now));
           receive(mockStation(now));
+          receive(mockPower(now));
           receive(mockOutages(now, today, today !== previousDate));
           previousDate = today;
         };
@@ -185,22 +192,23 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
 
   const stationExpires = station?.kind === "station" && station.measurement
     ? Date.parse(station.measurement.measuredAt) + station.staleAfterMs : Infinity;
+  const powerExpires = power ? Date.parse(power.checkedAt) + power.staleAfterMs : Infinity;
   const outagesExpire = outages?.lastSuccessfulPollAt
     ? Date.parse(outages.lastSuccessfulPollAt) + outages.staleAfterMs : Infinity;
 
   useEffect(() => {
     if (!now) return;
     const nextMinute = now - now % minuteMs + minuteMs;
-    const next = Math.min(nextMinute, stationExpires > now ? stationExpires : Infinity, outagesExpire > now ? outagesExpire : Infinity);
+    const next = Math.min(nextMinute, stationExpires > now ? stationExpires : Infinity, powerExpires > now ? powerExpires : Infinity, outagesExpire > now ? outagesExpire : Infinity);
     const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, next - Date.now()));
     return () => window.clearTimeout(timer);
-  }, [now, stationExpires, outagesExpire]);
+  }, [now, stationExpires, powerExpires, outagesExpire]);
 
   return (
     <DashboardContext.Provider value={{
-      connection, station, stationStale: now >= stationExpires, outages, outagesStale: now >= outagesExpire,
+      connection, power, station, stationStale: now >= stationExpires, outages, outagesStale: now >= outagesExpire,
       today: now ? kyivDate(new Date(now)) : "", now,
-      historySupported, revision, schedulesRevision, telemetry, chargeHistory, outageHistory, request,
+      historySupported, revision, schedulesRevision, telemetry, powerHistory, chargeHistory, outageHistory, request,
     }}>
       {children}
     </DashboardContext.Provider>

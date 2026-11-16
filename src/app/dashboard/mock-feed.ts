@@ -73,6 +73,10 @@ export function mockOutages(now: number, today: string, schedulesChanged: boolea
 
 export function mockHistory(request: DashboardRequest, now: number): DashboardMessage {
   const oldest = now - 7 * 24 * hour;
+  if (request.type === "powerHistory") {
+    const message = mockPower(now);
+    return { ...request, value: message.type === "power" ? message.value?.events ?? [] : [] };
+  }
   if (request.type === "outageHistory") {
     const first = Math.max(oldest, telemetryWindow({ from: request.date, to: request.date }).start);
     if (first > now || request.date < kyivDate(new Date(oldest))) return { ...request, value: [] };
@@ -94,4 +98,19 @@ export function mockHistory(request: DashboardRequest, now: number): DashboardMe
     samples.push(sample(time));
   }
   return { ...request, value: { ...window, samples } };
+}
+
+export function mockPower(now: number): DashboardMessage {
+  const points = [
+    { hours: 168, status: "unknown" as const }, { hours: 165, status: "online" as const },
+    { hours: 142, status: "offline" as const }, { hours: 138, status: "online" as const },
+    { hours: 92, status: "offline" as const }, { hours: 88, status: "online" as const },
+    { hours: 27, status: "unknown" as const }, { hours: 26, status: "online" as const },
+    { hours: 10, status: "offline" as const }, { hours: 6, status: "online" as const },
+  ];
+  return { type: "power", value: {
+    status: "online", staleAfterMs: 120_000, checkedAt: new Date(now).toISOString(),
+    lastOnlineAt: new Date(now).toISOString(), lastOfflineAt: new Date(now - 10 * hour).toISOString(),
+    events: points.map(({ hours, status }) => ({ status, observedAt: new Date(now - hours * hour).toISOString() })),
+  } };
 }
