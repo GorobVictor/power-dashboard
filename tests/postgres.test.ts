@@ -47,6 +47,15 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     assert.equal(await findLatest(db, "missing"), null);
     assert.equal((await findLatest(db, second.id))?.measurement, null);
 
+    await t.test("stores an unknown power state when ping cannot run", async () => {
+      const at = new Date();
+      const state = await savePowerState(db, undefined, "unknown", at, false);
+      assert.equal(state.status, "unknown");
+      assert.equal((await readPower(db))?.status, "unknown");
+      await db.query("DELETE FROM power_monitor_events");
+      await db.query("DELETE FROM power_monitor_state");
+    });
+
     await t.test("power transitions preserve observations and queue alerts once", async () => {
       const at = new Date();
       let state = await savePowerState(db, undefined, "online", at, true, at, 30_000, true);

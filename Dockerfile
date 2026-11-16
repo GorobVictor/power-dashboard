@@ -25,7 +25,11 @@ CMD ["node", "src/server/web.ts"]
 
 FROM base AS worker
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping && rm -rf /var/lib/apt/lists/*
+# The worker drops all capabilities; remove ping's file capability so execve
+# succeeds and Linux unprivileged ICMP sockets can be used instead.
+RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping libcap2-bin \
+    && if [ -n "$(getcap /usr/bin/ping)" ]; then setcap -r /usr/bin/ping; fi \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN --mount=type=tmpfs,target=/root/.npm npm ci --omit=dev --omit=optional

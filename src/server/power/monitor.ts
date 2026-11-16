@@ -4,7 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Client } from "pg";
 import { positiveInteger } from "../config.ts";
 import { databaseClient, inTransaction } from "../db.ts";
-import { createLogger, errorFields } from "../logger.ts";
+import { createLogger, errorFields, errorMessage } from "../logger.ts";
 import { findCurrentSchedules } from "../outages/repository.ts";
 import { getCurrentOutages } from "../outages/service.ts";
 import { powerMessage, powerScheduleDetails } from "../telegram/power.ts";
@@ -50,10 +50,13 @@ export async function savePowerState(db: Client, previous: State | undefined, st
     }
     if (changed) await db.query("INSERT INTO power_monitor_events (status, observed_at) VALUES ($1, $2)", [status, eventAt]);
     await db.query(`INSERT INTO power_monitor_state (id, status, last_known_status, checked_at, stale_after_ms, last_online_at, last_offline_at)
-      VALUES (true, $1, $2, $3, $4, CASE WHEN $5 THEN $3 END, CASE WHEN $1 = 'offline' THEN $3 END)
-      ON CONFLICT (id) DO UPDATE SET status = $1, last_known_status = $2, checked_at = $3, stale_after_ms = $4,
-      last_online_at = CASE WHEN $5 THEN $3 ELSE power_monitor_state.last_online_at END,
-      last_offline_at = CASE WHEN $1 = 'offline' AND power_monitor_state.last_known_status IS DISTINCT FROM 'offline' THEN $3 ELSE power_monitor_state.last_offline_at END`, [status, known, at, staleAfterMs, successful]);
+      VALUES (true, $1::text, $2::text, $3::timestamptz, $4::integer,
+        CASE WHEN $5::boolean THEN $3::timestamptz END,
+        CASE WHEN $1::text = 'offline' THEN $3::timestamptz END)
+      ON CONFLICT (id) DO UPDATE SET status = $1::text, last_known_status = $2::text,
+      checked_at = $3::timestamptz, stale_after_ms = $4::integer,
+      last_online_at = CASE WHEN $5::boolean THEN $3::timestamptz ELSE power_monitor_state.last_online_at END,
+      last_offline_at = CASE WHEN $1::text = 'offline' AND power_monitor_state.last_known_status IS DISTINCT FROM 'offline' THEN $3::timestamptz ELSE power_monitor_state.last_offline_at END`, [status, known, at, staleAfterMs, successful]);
     if (shouldNotify) {
       const current = outageQueue ? await getCurrentOutages(outageQueue, at, (date, queue) => findCurrentSchedules(db, date, queue)) : null;
       const schedule = powerScheduleDetails(outageQueue, at, current?.schedules ?? [], current?.stale ?? null);
@@ -91,7 +94,7 @@ export async function collectPower(shutdown: AbortSignal, notify: boolean, outag
           try { result = await ping(ip, signal); }
           catch (error) {
             signal.throwIfAborted();
-            log.warn("Ping unavailable", errorFields(error));
+            log.warn("Ping unavailable", { ...errorFields(error), reason: errorMessage(error) });
             result = null;
           }
           const at = new Date();
@@ -111,7 +114,7 @@ export async function collectPower(shutdown: AbortSignal, notify: boolean, outag
         }
       }
     } catch (error) {
-      if (!shutdown.aborted) log.warn("Power monitor interrupted", errorFields(error));
+      if (!shutdown.aborted) log.warn("Power monitor interrupted", { ...errorFields(error), reason: errorMessage(error) });
     } finally {
       await db.end().catch(() => undefined);
     }
