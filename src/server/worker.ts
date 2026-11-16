@@ -66,7 +66,7 @@ try {
 }
 
 const collectors = [
-  collectPower(shutdown.signal, !!telegram),
+  collectPower(shutdown.signal, !!telegram, telegram?.outageQueue),
   runMarstek(shutdown.signal, telegram ?? undefined),
   outageSourceName() === "dtek"
     ? collectDtekSchedules(shutdown.signal, telegram?.outageQueue, !!telegram)

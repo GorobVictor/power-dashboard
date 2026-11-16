@@ -65,7 +65,10 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       const messages = await db.query("DELETE FROM telegram_outbox RETURNING message");
       assert.equal(messages.rowCount, 2);
       assert.match(messages.rows[0].message, /зникло/);
+      assert.match(messages.rows[0].message, /Зі світлом: щонайменше 1 с/);
       assert.match(messages.rows[1].message, /зʼявилося/);
+      assert.match(messages.rows[1].message, /Без світла: щонайменше 1 с/);
+      assert.match(messages.rows[0].message, /чергу не налаштовано/);
     });
 
     const metrics = { ...decodeState(Buffer.alloc(139)), upsEnabled: null };

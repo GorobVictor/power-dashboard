@@ -5,6 +5,9 @@ import type { Client } from "pg";
 import { positiveInteger } from "../config.ts";
 import { databaseClient, inTransaction } from "../db.ts";
 import { createLogger, errorFields } from "../logger.ts";
+import { findCurrentSchedules } from "../outages/repository.ts";
+import { getCurrentOutages } from "../outages/service.ts";
+import { powerMessage, powerScheduleDetails } from "../telegram/power.ts";
 import { enqueueTelegramMessages } from "../telegram/outbox.ts";
 
 export type PowerStatus = "online" | "offline" | "unknown";
@@ -33,25 +36,35 @@ async function readState(db: Client): Promise<State | undefined> {
   return rows[0];
 }
 
-export async function savePowerState(db: Client, previous: State | undefined, status: PowerStatus, at: Date, notify: boolean, eventAt = at, staleAfterMs = 30_000, successful = false) {
+export async function savePowerState(db: Client, previous: State | undefined, status: PowerStatus, at: Date, notify: boolean, eventAt = at, staleAfterMs = 30_000, successful = false, outageQueue?: string) {
   const changed = !previous || previous.status !== status;
   const known = status === "unknown" ? previous?.lastKnownStatus ?? null : status;
   await inTransaction(db, async () => {
+    let previousStart: Date | null = null;
+    const shouldNotify = notify && status !== "unknown" && previous?.lastKnownStatus && previous.lastKnownStatus !== status;
+    if (shouldNotify && previous.status === previous.lastKnownStatus) {
+      const { rows: [last] } = await db.query<{ status: PowerStatus; observedAt: Date }>(
+        `SELECT status, observed_at AS "observedAt" FROM power_monitor_events ORDER BY observed_at DESC, id DESC LIMIT 1`,
+      );
+      if (last?.status === previous.status) previousStart = last.observedAt;
+    }
     if (changed) await db.query("INSERT INTO power_monitor_events (status, observed_at) VALUES ($1, $2)", [status, eventAt]);
     await db.query(`INSERT INTO power_monitor_state (id, status, last_known_status, checked_at, stale_after_ms, last_online_at, last_offline_at)
       VALUES (true, $1, $2, $3, $4, CASE WHEN $5 THEN $3 END, CASE WHEN $1 = 'offline' THEN $3 END)
       ON CONFLICT (id) DO UPDATE SET status = $1, last_known_status = $2, checked_at = $3, stale_after_ms = $4,
       last_online_at = CASE WHEN $5 THEN $3 ELSE power_monitor_state.last_online_at END,
       last_offline_at = CASE WHEN $1 = 'offline' AND power_monitor_state.last_known_status IS DISTINCT FROM 'offline' THEN $3 ELSE power_monitor_state.last_offline_at END`, [status, known, at, staleAfterMs, successful]);
-    if (notify && status !== "unknown" && previous?.lastKnownStatus && previous.lastKnownStatus !== status) {
-      await enqueueTelegramMessages(db, [status === "online" ? "⚡ *Світло, ймовірно, зʼявилося*\nРозетка знову відповідає на ping\\." : "🔌 *Світло, ймовірно, зникло*\nРозетка не відповідає на ping\\."]);
+    if (shouldNotify) {
+      const current = outageQueue ? await getCurrentOutages(outageQueue, at, (date, queue) => findCurrentSchedules(db, date, queue)) : null;
+      const schedule = powerScheduleDetails(outageQueue, at, current?.schedules ?? [], current?.stale ?? null);
+      await enqueueTelegramMessages(db, [powerMessage(status, at, previousStart, schedule)]);
     }
     await db.query("SELECT pg_notify('power_dashboard_updates', $1)", [JSON.stringify({ type: "power" })]);
   });
   return { status, lastKnownStatus: known, checkedAt: at } satisfies State;
 }
 
-export async function collectPower(shutdown: AbortSignal, notify: boolean) {
+export async function collectPower(shutdown: AbortSignal, notify: boolean, outageQueue?: string) {
   const ip = process.env.POWER_MONITOR_IP?.trim();
   if (!ip) return;
   if (isIP(ip) !== 4) throw new Error("POWER_MONITOR_IP must be an IPv4 address");
@@ -90,7 +103,7 @@ export async function collectPower(shutdown: AbortSignal, notify: boolean) {
               if (result) log.info("Socket is responding", { ip });
               else log.warn("Socket is not responding", { ip });
             }
-            state = await savePowerState(db, state, status, at, notify, at, staleAfterMs, result);
+            state = await savePowerState(db, state, status, at, notify, at, staleAfterMs, result, outageQueue);
           }
           const now = performance.now();
           nextPoll = nextPollAt(nextPoll, now, interval);
