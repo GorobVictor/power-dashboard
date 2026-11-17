@@ -14,12 +14,13 @@ export function durationText(milliseconds: number): string {
   return [days ? `${days} дн` : "", hours ? `${hours} год` : "", minutes ? `${minutes} хв` : "", seconds || (!days && !hours && !minutes) ? `${seconds} с` : ""].filter(Boolean).join(" ");
 }
 
-export function powerMessage(status: Status, at: Date, previousStart: Date | null, schedule: string[]): string {
+export function powerMessage(status: Status, at: Date, previousStart: Date | null, schedule: string[], charge: number | null = null): string {
   const heading = status === "online" ? "⚡ *Світло зʼявилося*" : "🔌 *Світло зникло*";
   const label = status === "online" ? "Без світла" : "Зі світлом";
   const duration = previousStart && previousStart <= at ? `щонайменше ${durationText(at.getTime() - previousStart.getTime())}` : "тривалість невідома";
   const details = [`Час: ${observedTime.format(at)} · Київ`, `${label}: ${duration}`];
-  return [heading, ...details.map(escapeMarkdown), ...(schedule.length ? ["", ...schedule.map(escapeMarkdown)] : [])].join("\n");
+  const battery = charge === null ? "🔋 Заряд станції: немає актуальних даних" : `🔋 Заряд станції: *${charge}%*`;
+  return [heading, ...details.map(escapeMarkdown), "", battery, ...(schedule.length ? ["", ...schedule.map(escapeMarkdown)] : [])].join("\n");
 }
 
 function nextDate(date: string) {

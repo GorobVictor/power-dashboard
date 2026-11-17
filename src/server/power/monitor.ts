@@ -7,6 +7,7 @@ import { databaseClient, inTransaction } from "../db.ts";
 import { createLogger, errorFields, errorMessage } from "../logger.ts";
 import { findCurrentSchedules } from "../outages/repository.ts";
 import { getCurrentOutages } from "../outages/service.ts";
+import { findChargeAt } from "../stations/repository.ts";
 import { powerMessage, powerScheduleDetails } from "../telegram/power.ts";
 import { enqueueTelegramMessages } from "../telegram/outbox.ts";
 
@@ -36,7 +37,7 @@ async function readState(db: Client): Promise<State | undefined> {
   return rows[0];
 }
 
-export async function savePowerState(db: Client, previous: State | undefined, status: PowerStatus, at: Date, notify: boolean, eventAt = at, staleAfterMs = 30_000, successful = false, outageQueue?: string) {
+export async function savePowerState(db: Client, previous: State | undefined, status: PowerStatus, at: Date, notify: boolean, eventAt = at, staleAfterMs = 30_000, successful = false, outageQueue?: string, station?: { id: string; staleAfterMs: number }) {
   const changed = !previous || previous.status !== status;
   const known = status === "unknown" ? previous?.lastKnownStatus ?? null : status;
   await inTransaction(db, async () => {
@@ -60,7 +61,8 @@ export async function savePowerState(db: Client, previous: State | undefined, st
     if (shouldNotify) {
       const current = outageQueue ? await getCurrentOutages(outageQueue, at, (date, queue) => findCurrentSchedules(db, date, queue)) : null;
       const schedule = powerScheduleDetails(outageQueue, at, current?.schedules ?? [], current?.stale ?? null);
-      await enqueueTelegramMessages(db, [powerMessage(status, at, previousStart, schedule)]);
+      const charge = station ? await findChargeAt(db, station.id, at, station.staleAfterMs) : null;
+      await enqueueTelegramMessages(db, [powerMessage(status, at, previousStart, schedule, charge)]);
     }
     await db.query("SELECT pg_notify('power_dashboard_updates', $1)", [JSON.stringify({ type: "power" })]);
   });
@@ -72,6 +74,8 @@ export async function collectPower(shutdown: AbortSignal, notify: boolean, outag
   if (!ip) return;
   if (isIP(ip) !== 4) throw new Error("POWER_MONITOR_IP must be an IPv4 address");
   const interval = positiveInteger("POWER_POLL_INTERVAL_MS", 1_000);
+  const stationId = process.env.STATION_ID?.trim();
+  const station = stationId ? { id: stationId, staleAfterMs: positiveInteger("STALE_AFTER_MS", 5_000) } : undefined;
   const staleAfterMs = Math.min(2_147_483_647, interval * 2 + 6_000);
   while (!shutdown.aborted) {
     const db = databaseClient("power-monitor");
@@ -106,7 +110,7 @@ export async function collectPower(shutdown: AbortSignal, notify: boolean, outag
               if (result) log.info("Socket is responding", { ip });
               else log.warn("Socket is not responding", { ip });
             }
-            state = await savePowerState(db, state, status, at, notify, at, staleAfterMs, result, outageQueue);
+            state = await savePowerState(db, state, status, at, notify, at, staleAfterMs, result, outageQueue, station);
           }
           const now = performance.now();
           nextPoll = nextPollAt(nextPoll, now, interval);

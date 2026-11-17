@@ -8,7 +8,7 @@ import { readPower } from "../src/server/power/repository.ts";
 import { decodeState } from "../src/server/marstek/protocol.ts";
 import { findCurrentSchedules, findScheduleHistory, lockOutageSource, saveOutagePoll } from "../src/server/outages/repository.ts";
 import type { Schedule } from "../src/server/outages/schedules.ts";
-import { findLatest, findTelemetryHistory, lockStation, registerStation, saveMeasurement } from "../src/server/stations/repository.ts";
+import { findChargeAt, findLatest, findTelemetryHistory, lockStation, registerStation, saveMeasurement } from "../src/server/stations/repository.ts";
 import { readBatteryBaseline, saveBatteryReading } from "../src/server/telegram/battery.ts";
 import { describeOutageAt, saveOutagePollWithTelegram } from "../src/server/telegram/outages.ts";
 
@@ -46,6 +46,18 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
     assert.equal((await findLatest(db, first.id))?.measurement?.upsEnabled, null);
     assert.equal(await findLatest(db, "missing"), null);
     assert.equal((await findLatest(db, second.id))?.measurement, null);
+
+    await t.test("power alerts select fresh charge for the configured station at the event time", async () => {
+      const at = new Date();
+      const before = new Date(at.getTime() - 1_000);
+      const after = new Date(at.getTime() + 1_000);
+      await db.query("INSERT INTO measurements (station_id, measured_at, soc_pct) VALUES ($1, $3, 0), ($2, $3, 88), ($1, $4, 99)", [first.id, second.id, before, after]);
+      assert.equal(await findChargeAt(db, first.id, at, 5_000), 0);
+      assert.equal(await findChargeAt(db, second.id, at, 5_000), 88);
+      assert.equal(await findChargeAt(db, first.id, at, 1_000), null);
+      assert.equal(await findChargeAt(db, "missing", at, 5_000), null);
+      await db.query("DELETE FROM measurements WHERE measured_at IN ($1, $2)", [before, after]);
+    });
 
     await t.test("stores an unknown power state when ping cannot run", async () => {
       const at = new Date();

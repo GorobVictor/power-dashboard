@@ -70,6 +70,17 @@ export async function findLatest(db: Pool | Client, stationId: string): Promise<
   };
 }
 
+export async function findChargeAt(db: Pool | Client, stationId: string, at: Date, staleAfterMs: number): Promise<number | null> {
+  const { rows: [latest] } = await db.query<{ socPct: number | null; measuredAt: Date }>(
+    `SELECT soc_pct AS "socPct", measured_at AS "measuredAt" FROM measurements
+     WHERE station_id = $1 AND measured_at <= $2::timestamptz
+     ORDER BY measured_at DESC LIMIT 1`,
+    [stationId, at],
+  );
+  if (!latest || at.getTime() - latest.measuredAt.getTime() >= staleAfterMs) return null;
+  return latest.socPct;
+}
+
 export async function findTelemetryHistory(
   db: Pool | Client, stationId: string, period: TelemetryPeriod | TelemetryDateRange, now = Date.now(),
 ): Promise<TelemetryHistory> {

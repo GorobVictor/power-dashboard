@@ -17,6 +17,11 @@ test("power notifications show elapsed time and do not invent missing durations"
   assert.match(powerMessage("online", at(12), null, []), /Без світла: тривалість невідома/);
   assert.match(powerMessage("offline", at(12), at(13), []), /Зі світлом: тривалість невідома/);
   assert.match(powerMessage("online", at(12), null, ["Черга 4.1: світло."]), /Черга 4\\\.1: світло\\\./);
+  for (const status of ["online", "offline"] as const) {
+    assert.match(powerMessage(status, at(12), null, [], 0), /Заряд станції: \*0%\*/);
+    assert.match(powerMessage(status, at(12), null, [], 81), /Заряд станції: \*81%\*/);
+    assert.match(powerMessage(status, at(12), null, [], null), /Заряд станції: немає актуальних даних/);
+  }
 });
 
 test("schedule context reports current plan and next transition including half hours", () => {
@@ -57,6 +62,7 @@ test("power transition uses the last continuous event and queues the message ato
     async query(sql: string, args?: unknown[]) {
       queries.push({ sql, args });
       if (sql.startsWith("SELECT status, observed_at")) return { rows: [{ status: "online", observedAt: at(11) }] };
+      if (sql.startsWith("SELECT soc_pct")) return { rows: [{ socPct: 42, measuredAt: at(12) }] };
       return { rows: [] };
     },
   } as unknown as import("pg").Client;
@@ -73,4 +79,26 @@ test("power transition uses the last continuous event and queues the message ato
   const uncertain = queries.find((query) => query.sql.startsWith("INSERT INTO telegram_outbox"));
   assert.match((uncertain?.args?.[0] as string[])[0], /Зі світлом: тривалість невідома/);
   assert.ok(!queries.some((query) => query.sql.startsWith("SELECT status, observed_at")));
+
+  queries.length = 0;
+  await savePowerState(db, { status: "offline", lastKnownStatus: "offline", checkedAt: at(11) }, "online", at(12), true, at(12), 30_000, true, undefined, { id: "station-a", staleAfterMs: 5_000 });
+  const withCharge = queries.find((query) => query.sql.startsWith("INSERT INTO telegram_outbox"));
+  assert.match((withCharge?.args?.[0] as string[])[0], /Заряд станції: \*42%\*/);
+  assert.deepEqual(queries.find((query) => query.sql.startsWith("SELECT soc_pct"))?.args, ["station-a", at(12)]);
+});
+
+
+test("battery lookup keeps zero and rejects missing, stale or unknown charge", async () => {
+  const { findChargeAt } = await import("../src/server/stations/repository.ts");
+  let rows: { socPct: number | null; measuredAt: Date }[] = [];
+  let params: unknown[] = [];
+  const db = { async query(_sql: string, args: unknown[]) { params = args; return { rows }; } } as unknown as import("pg").Client;
+  assert.equal(await findChargeAt(db, "station-a", at(12), 5_000), null);
+  rows = [{ socPct: 0, measuredAt: new Date(at(12).getTime() - 4_999) }];
+  assert.equal(await findChargeAt(db, "station-a", at(12), 5_000), 0);
+  assert.deepEqual(params, ["station-a", at(12)]);
+  rows = [{ socPct: 30, measuredAt: new Date(at(12).getTime() - 5_000) }];
+  assert.equal(await findChargeAt(db, "station-a", at(12), 5_000), null);
+  rows = [{ socPct: null, measuredAt: at(12) }];
+  assert.equal(await findChargeAt(db, "station-a", at(12), 5_000), null);
 });
