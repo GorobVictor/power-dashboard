@@ -62,10 +62,12 @@ test("battery levels handle skips, recovery, missing and first readings", () => 
   assert.deepEqual(messages(50, 50), []);
 });
 
-test("battery level and discharge transition can both be reported", () => {
+test("charge and discharge changes do not produce notifications while threshold alerts remain", () => {
   const station = { name: "Station" } as Station;
+  assert.deepEqual(batteryMessages(station, { batteryPowerW: -10, socPct: 80 }, { batteryPowerW: 10, socPct: 80 }), []);
+  assert.deepEqual(batteryMessages(station, { batteryPowerW: 10, socPct: 80 }, { batteryPowerW: -10, socPct: 80 }), []);
+  assert.deepEqual(batteryMessages(station, { batteryPowerW: -10, socPct: 99 }, { batteryPowerW: -10, socPct: 98 }), []);
   assert.deepEqual(batteryMessages(station, { batteryPowerW: 10, socPct: 41 }, { batteryPowerW: -10, socPct: 40 }), [
-    "🔋 *Акумулятор розряджається*\nStation\n\nЗаряд: *40%*",
     "⚠️ *Небезпечний рівень заряду · 40%*\nStation\n\nЗаряд: *40%*",
   ]);
 });

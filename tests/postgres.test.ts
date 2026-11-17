@@ -191,7 +191,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       });
     };
 
-    await t.test("queues battery transitions once and retains known readings through gaps", async () => {
+    await t.test("queues battery threshold alerts and retains known readings through gaps", async () => {
       assert.equal(await lockStation(db, first.id), true);
       let battery = await readBatteryBaseline(db, first.id);
       const at = (seconds: number) => new Date(latest.measuredAt.getTime() + seconds * 1_000);
@@ -226,14 +226,8 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       await save(20, 200, 94);
       await save(21, -100, null);
       assert.deepEqual(await telegramMessages(), [
-        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*",
         "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *20%*",
-        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *19%*",
         "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *19%*",
-        "🔋 *Акумулятор розрядився нижче 99%*\nFirst\n\nЗаряд: *98%*",
-        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *97%*",
-        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *97%*",
-        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *94%*",
       ]);
       assert.deepEqual(await readBatteryBaseline(db, second.id), { batteryPowerW: null, socPct: 87 });
       await db.query("DELETE FROM telegram_outbox");
@@ -323,9 +317,7 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
         db, first, { ...metrics, measuredAt: new Date(at(30).getTime() + 1000), batteryPowerW: -100, socPct: 19 }, discharging, options,
       );
       assert.deepEqual(await telegramMessages(), [
-        "⚡ *Акумулятор заряджається*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
         "⚠️ *Небезпечний рівень заряду · 30%*\nFirst\n\nЗаряд: *30%*\n\n📅 За графіком черги 4\\.1 зараз відключення\\.",
-        "🔋 *Акумулятор розряджається*\nFirst\n\nЗаряд: *29%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
         "⚠️ *Небезпечний рівень заряду · 20%*\nFirst\n\nЗаряд: *19%*\n\n📅 За графіком черги 4\\.1 зараз має бути світло\\.",
       ]);
       assert.match(await describeOutageAt(db, queue, at(31)), /застарів/);
