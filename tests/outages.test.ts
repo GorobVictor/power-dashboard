@@ -175,7 +175,7 @@ test("outage overview aligns today's charge and zones across the Kyiv clock chan
       })),
     };
   };
-  const read: typeof getOutageOverview = (queue, time) => getOutageOverview(queue, time, readOutages, readCharge);
+  const read: typeof getOutageOverview = (queue, time) => getOutageOverview(queue, time, readOutages, readCharge, async () => null, async () => null);
   assert.equal((await outageOverview(request("?queue=4.1&queue=5.2"), read, now)).status, 400);
   const response = await outageOverview(request("?queue=4.1"), read, now);
   assert.equal(response.status, 200);
@@ -189,8 +189,41 @@ test("outage overview aligns today's charge and zones across the Kyiv clock chan
     { start: 360, end: 390, kind: "outage" });
   assert.deepEqual(overview.charge.points.map(({ socPct }: { socPct: number | null }) => socPct), [30, 25, null, 0]);
   assert.equal(overview.charge.last.time, "07:25");
+  const observed = {
+    status: "online" as const, staleAfterMs: 10_000, checkedAt: new Date(now.getTime() - 1_000).toISOString(),
+    lastOnlineAt: new Date(now.getTime() - 1_000).toISOString(), lastOfflineAt: null,
+    events: [
+      { status: "online" as const, observedAt: new Date(window.start).toISOString() },
+      { status: "offline" as const, observedAt: new Date(window.start + 6 * 3_600_000).toISOString() },
+      { status: "online" as const, observedAt: new Date(window.start + 7 * 3_600_000).toISOString() },
+    ],
+  };
+  const withPower = await getOutageOverview("4.1", now, readOutages, readCharge, async () => observed, async () => null);
+  assert.equal(withPower.power.current?.status, "online");
+  assert.equal(withPower.power.duration, 1380);
+  assert.deepEqual(withPower.power.bands.find((band) => band.kind === "offline"), { start: 360, end: 420, kind: "offline" });
+  assert.ok(withPower.charge?.backgrounds.some((band) => band.layer === "power" && band.kind === "offline"));
+  assert.ok(withPower.charge?.backgrounds.some((band) => band.layer === "schedule" && band.kind === "outage"));
+  const withoutCharge = await getOutageOverview("4.1", now, readOutages, async () => null, async () => observed, async () => null);
+  assert.equal(withoutCharge.charge, null);
+  assert.ok(withoutCharge.power.bands.length > 0);
+  const yesterday = "2026-03-28";
+  const yesterdayWindow = telemetryWindow({ from: yesterday, to: yesterday });
+  const yesterdaySchedule = { ...schedule, date: yesterday, hours: [...schedule.hours], possible: [...schedule.possible] };
+  const yesterdayHistory = { ...yesterdayWindow, samples: [{ time: yesterdayWindow.start + 60_000, socPct: 0, batteryPowerW: null, gridPowerW: null, backupLoadPowerW: null }] };
+  const previous = await getOutageOverview("4.1", now, readOutages, readCharge, async () => observed,
+    async (queue, date) => {
+      assert.equal(queue, "4.1");
+      assert.equal(date, yesterday);
+      return { schedule: yesterdaySchedule, charge: yesterdayHistory };
+    });
+  assert.equal(previous.widgetDays[0].date, yesterday);
+  assert.equal(previous.widgetDays[0].charge?.last.socPct, 0);
+  assert.equal(previous.widgetDays[0].charge?.duration, 1440);
+  assert.equal(previous.widgetDays[1].date, today);
+  assert.equal(previous.widgetDays[1].charge?.duration, 1380);
 
-  const scheduleOnly = await getOutageOverview("4.1", now, readOutages, async () => { throw new Error("No telemetry"); });
+  const scheduleOnly = await getOutageOverview("4.1", now, readOutages, async () => { throw new Error("No telemetry"); }, async () => null, async () => null);
   assert.equal(scheduleOnly.days[0].status, "ScheduleApplies");
   assert.equal(scheduleOnly.charge, null);
 });

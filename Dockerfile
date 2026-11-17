@@ -18,7 +18,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build --chown=node:node /app/public ./public
 COPY --chown=node:node src/server ./src/server
-COPY --chown=node:node src/lib/dashboard-feed.ts src/lib/telemetry-history.ts ./src/lib/
+COPY --chown=node:node src/lib/dashboard-feed.ts src/lib/telemetry-history.ts src/lib/power-history.ts ./src/lib/
 USER node
 EXPOSE 3000
 CMD ["node", "src/server/web.ts"]
