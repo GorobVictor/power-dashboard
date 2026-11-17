@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { BatteryPanel, EnergyCounters } from "./battery";
 import { BatteryOverview } from "./battery-overview";
-import { OutageHistoryPanel, OutagesPanel, useOutageQueue } from "./outages";
+import { OutageHistoryPanel, OutagesPanel, QueuePicker, useOutageQueue } from "./outages";
 import { PowerFlow } from "./power-flow";
 import { TelemetryPanel } from "./telemetry";
 
@@ -141,7 +141,7 @@ export function DashboardDeck() {
         </div>
         <div className="hidden lg:col-span-2 lg:block"><EnergyCounters /></div>
         <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:col-span-2", panelClass("telemetry"))}>
-          <TelemetryPanel />
+          <TelemetryPanel queue={outageQueue.queue} queuePicker={<QueuePicker {...outageQueue} compact />} />
         </section>
       </div>
     </div>

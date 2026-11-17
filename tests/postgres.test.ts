@@ -6,7 +6,7 @@ import { Client } from "pg";
 import { savePowerState } from "../src/server/power/monitor.ts";
 import { readPower } from "../src/server/power/repository.ts";
 import { decodeState } from "../src/server/marstek/protocol.ts";
-import { findCurrentSchedules, findScheduleHistory, lockOutageSource, saveOutagePoll } from "../src/server/outages/repository.ts";
+import { findCurrentSchedules, findLatestScheduleVersions, findScheduleHistory, lockOutageSource, saveOutagePoll } from "../src/server/outages/repository.ts";
 import type { Schedule } from "../src/server/outages/schedules.ts";
 import { findChargeAt, findLatest, findTelemetryHistory, lockStation, registerStation, saveMeasurement } from "../src/server/stations/repository.ts";
 import { readBatteryBaseline, saveBatteryReading } from "../src/server/telegram/battery.ts";
@@ -176,6 +176,13 @@ test("PostgreSQL migrations, station isolation, and outage history", { skip: !co
       assert.deepEqual(history.map(({ observedAt }) => observedAt), [at(0), at(2), at(3)]);
       assert.equal((await findScheduleHistory(db, date, otherQueue.queue)).length, 1);
       assert.equal((await findScheduleHistory(db, tomorrow, firstSchedule.queue)).length, 1);
+      const latestPerDay = await findLatestScheduleVersions(db, date, tomorrow, firstSchedule.queue);
+      assert.deepEqual(latestPerDay.map(({ date, queue, status, observedAt }) => ({ date, queue, status, observedAt })), [
+        { date, queue: "4.1", status: "NoShutdowns", observedAt: at(3) },
+        { date: tomorrow, queue: "4.1", status: "NoShutdowns", observedAt: at(0) },
+      ]);
+      assert.equal((await findLatestScheduleVersions(db, date, tomorrow, "5.2")).length, 1);
+      assert.deepEqual(await findLatestScheduleVersions(db, date, tomorrow, "9.9"), []);
       assert.deepEqual(await findCurrentSchedules(db, date, otherQueue.queue), { schedules: [], lastSuccessfulPollAt: at(3) });
       assert.deepEqual((await findCurrentSchedules(db, tomorrow, null)).schedules.map(({ date }) => date), [tomorrow]);
 

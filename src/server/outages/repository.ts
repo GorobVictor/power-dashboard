@@ -96,3 +96,16 @@ export async function findScheduleHistory(db: Pool | Client, date: string, queue
   );
   return rows.map(toVersion);
 }
+
+
+export async function findLatestScheduleVersions(db: Pool | Client, from: string, to: string, queue: string) {
+  const { rows } = await db.query<VersionRow>(
+    `SELECT DISTINCT ON (schedule_date) queue, to_char(schedule_date, 'YYYY-MM-DD') AS date,
+       observed_at AS "observedAt", content
+     FROM outage_schedule_versions
+     WHERE queue = $1 AND schedule_date BETWEEN $2::date AND $3::date
+     ORDER BY schedule_date, id DESC`,
+    [queue, from, to],
+  );
+  return rows.map(toVersion);
+}

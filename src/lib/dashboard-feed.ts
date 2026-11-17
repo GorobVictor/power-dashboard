@@ -34,10 +34,12 @@ type TelemetryRequest = { type: "telemetry" } & TelemetrySelection;
 export type DashboardRequest =
   | TelemetryRequest
   | { type: "powerHistory"; start: number; end: number }
+  | { type: "scheduleOverlay"; from: string; to: string; queue: string }
   | { type: "chargeHistory"; date: string }
   | { type: "outageHistory"; date: string; queue: string | null };
 
 export type DashboardMessage =
+  | { type: "scheduleOverlay"; from: string; to: string; queue: string; value: DashboardSchedule[] | null }
   | { type: "power"; value: DashboardPower | null }
   | { type: "powerHistory"; start: number; end: number; value: PowerEvent[] | null }
   | { type: "station"; value: DashboardStation }

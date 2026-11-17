@@ -73,6 +73,16 @@ export function mockOutages(now: number, today: string, schedulesChanged: boolea
 
 export function mockHistory(request: DashboardRequest, now: number): DashboardMessage {
   const oldest = now - 7 * 24 * hour;
+  if (request.type === "scheduleOverlay") {
+    const firstDate = kyivDate(new Date(oldest));
+    const today = kyivDate(new Date(now));
+    const value: DashboardSchedule[] = [];
+    for (let date = request.from < firstDate ? firstDate : request.from; date <= request.to && date <= today; date = shiftTelemetryDate(date, 1)) {
+      const first = telemetryWindow({ from: date, to: date }).start;
+      value.push(schedule(date, request.queue, Math.min(now, first + 2 * hour), request.queue === "4.2" ? 10 : 8));
+    }
+    return { ...request, value };
+  }
   if (request.type === "powerHistory") {
     const message = mockPower(now);
     return { ...request, value: message.type === "power" ? message.value?.events ?? [] : [] };

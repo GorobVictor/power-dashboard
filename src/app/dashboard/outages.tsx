@@ -173,7 +173,7 @@ function subscribeToSavedQueue(onChange: () => void) {
   return () => window.removeEventListener("storage", onChange);
 }
 
-type QueueFilter = { queue: string | null; queues: string[]; selectQueue: (value: string) => void };
+export type QueueFilter = { queue: string | null; queues: string[]; selectQueue: (value: string) => void };
 
 export function useOutageQueue() {
   const [selection, setSelection] = useState<string>();
@@ -197,7 +197,7 @@ export function useOutageQueue() {
   return { queue, queues, schedules, selectQueue };
 }
 
-function QueuePicker({ queue, queues, selectQueue, compact }: QueueFilter & { compact?: boolean }) {
+export function QueuePicker({ queue, queues, selectQueue, compact }: QueueFilter & { compact?: boolean }) {
   const id = useId();
   return (
     <div className="flex flex-wrap items-center justify-between gap-1.5">

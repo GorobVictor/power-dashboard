@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { shiftTelemetryDate, telemetryPeriods, type TelemetryHistory, type TelemetrySample, type TelemetrySelection } from "@/lib/telemetry-history";
 import { cn } from "@/lib/utils";
-import { isScheduleDate, timeZone } from "@/server/outages/schedules";
+import { isScheduleDate, kyivDate, timeZone } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
+import { ScheduleHistoryBands, ScheduleHistoryLegend } from "./schedule-overlay";
 import { PowerChartLegend, PowerChartOverlay } from "./power-timeline";
 import { mobilePanelClassName, Timestamp } from "./panel";
 
@@ -83,9 +84,9 @@ export function ScheduleChargeChart({ history, overlay }: { history: TelemetryHi
   return <HistoryChart title="Заряд і розряд" unit="%" history={history} calendar series={scheduleCharge} overlay={overlay} />;
 }
 
-function HistoryChart({ title, unit, history, calendar, series, overlay }: {
+function HistoryChart({ title, unit, history, calendar, series, overlay, background }: {
   title: string; unit: string; history: TelemetryHistory; calendar: boolean; series: Series[];
-  overlay?: ChartOverlay;
+  overlay?: ChartOverlay; background?: ReactNode;
 }) {
   const label = useId();
   const instructions = useId();
@@ -173,7 +174,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
                 setSelection(Math.floor(available[next].time / bucket));
               }}
             >
-              {overlay?.background}
+              {overlay?.background ?? background}
               <PowerChartOverlay start={start} end={end} />
               <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
                 {!overlay && <defs>{series.map(({ key, color }, index) => <linearGradient key={key} id={`${gradientId}-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={unit === "%" ? 0.3 : 0.15} /><stop offset="100%" stopColor={color} stopOpacity="0.01" /></linearGradient>)}</defs>}
@@ -245,13 +246,13 @@ function HistoryChart({ title, unit, history, calendar, series, overlay }: {
   );
 }
 
-export function TelemetryPanel() {
+export function TelemetryPanel({ queue, queuePicker }: { queue: string | null; queuePicker: ReactNode }) {
   const [filter, setFilter] = useState<PeriodFilter>({ period: "today" });
   const [datesOpen, setDatesOpen] = useState(false);
   const [dateError, setDateError] = useState(false);
   const [chart, setChart] = useState<"charge" | "power">("charge");
   const datesId = useId();
-  const { station, telemetry, connection, historySupported, revision, request, today } = useDashboardLive();
+  const { station, telemetry, scheduleOverlay, schedulesRevision, connection, historySupported, revision, request, today } = useDashboardLive();
   const configured = station?.kind === "station";
   const selection = useMemo<TelemetrySelection | null>(() => {
     if (filter.period === "today" || filter.period === "yesterday") {
@@ -280,6 +281,16 @@ export function TelemetryPanel() {
       request({ type: "powerHistory", start: historyStart, end: historyEnd });
     }
   }, [calendar, historyStart, historyEnd, connection, historySupported, request, revision]);
+  const scheduleFrom = historyStart === undefined ? "" : kyivDate(new Date(historyStart));
+  const scheduleTo = historyEnd === undefined ? "" : kyivDate(new Date(historyEnd - 1));
+  useEffect(() => {
+    if (queue && scheduleFrom && scheduleTo && connection === "connected" && historySupported) {
+      request({ type: "scheduleOverlay", from: scheduleFrom, to: scheduleTo, queue });
+    }
+  }, [queue, scheduleFrom, scheduleTo, connection, historySupported, request, revision, schedulesRevision]);
+  const scheduleData = queue && scheduleOverlay?.queue === queue && scheduleOverlay.from === scheduleFrom && scheduleOverlay.to === scheduleTo
+    ? scheduleOverlay.value : undefined;
+  const scheduleBackground = history && scheduleData ? <ScheduleHistoryBands schedules={scheduleData} start={history.start} end={history.end} /> : undefined;
   const rangeLabel = filter.period === "dates" && fullDateFormat.formatRange(new Date(filter.from), new Date(filter.to));
   const message = station?.kind === "unconfigured" || station?.kind === "missing" ? "Історія з’явиться після налаштування станції."
     : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."
@@ -327,6 +338,7 @@ export function TelemetryPanel() {
         </div>
       </CardHeader>
       <CardContent className="min-w-0 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><ScheduleHistoryLegend queue={queue} schedules={scheduleData} from={scheduleFrom} to={scheduleTo} />{queuePicker}</div>
         {datesOpen && (
           <form id={datesId} className="space-y-2" onChange={() => setDateError(false)} onSubmit={(event) => {
             event.preventDefault();
@@ -370,10 +382,10 @@ export function TelemetryPanel() {
           <div className="dashboard-enter lg:space-y-3.5 xl:grid xl:grid-cols-2 xl:gap-3.5 xl:space-y-0"
             key={response.period === "dates" ? `${response.from}-${response.to}` : response.period}>
             <div className={chart === "charge" ? "dashboard-mobile-enter" : "hidden lg:block"}>
-              <HistoryChart title="Рівень заряду" unit="%" history={history} calendar={calendar} series={charge} />
+              <HistoryChart title="Рівень заряду" unit="%" history={history} calendar={calendar} series={charge} background={scheduleBackground} />
             </div>
             <div className={cn("lg:border-t lg:pt-3.5 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-3.5", chart === "power" ? "dashboard-mobile-enter" : "hidden lg:block")}>
-              <HistoryChart title="Потужність" unit="Вт" history={history} calendar={calendar} series={power} />
+              <HistoryChart title="Потужність" unit="Вт" history={history} calendar={calendar} series={power} background={scheduleBackground} />
             </div>
           </div>
         ) : (

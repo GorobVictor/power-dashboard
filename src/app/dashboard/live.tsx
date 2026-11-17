@@ -19,6 +19,7 @@ type DashboardLiveState = {
   revision: number;
   schedulesRevision: number;
   telemetry: Extract<DashboardMessage, { type: "telemetry" }> | undefined;
+  scheduleOverlay: Extract<DashboardMessage, { type: "scheduleOverlay" }> | undefined;
   powerHistory: Extract<DashboardMessage, { type: "powerHistory" }> | undefined;
   chargeHistory: Extract<DashboardMessage, { type: "chargeHistory" }> | undefined;
   outageHistory: Extract<DashboardMessage, { type: "outageHistory" }> | undefined;
@@ -33,6 +34,7 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
   const [station, setStation] = useState<DashboardStation>();
   const [outages, setOutages] = useState<DashboardOutages>();
   const [telemetry, setTelemetry] = useState<DashboardLiveState["telemetry"]>();
+  const [scheduleOverlay, setScheduleOverlay] = useState<DashboardLiveState["scheduleOverlay"]>();
   const [powerHistory, setPowerHistory] = useState<DashboardLiveState["powerHistory"]>();
   const [chargeHistory, setChargeHistory] = useState<DashboardLiveState["chargeHistory"]>();
   const [outageHistory, setOutageHistory] = useState<DashboardLiveState["outageHistory"]>();
@@ -76,6 +78,7 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
           if (message.schedulesChanged) setSchedulesRevision((value) => value + 1);
           break;
         case "telemetry": setTelemetry(message); break;
+        case "scheduleOverlay": setScheduleOverlay(message); break;
         case "powerHistory": setPowerHistory(message); break;
         case "chargeHistory": setChargeHistory(message); break;
         case "outageHistory": setOutageHistory(message); break;
@@ -208,7 +211,7 @@ export function DashboardLive({ children, mock }: { children: ReactNode; mock: b
     <DashboardContext.Provider value={{
       connection, power, station, stationStale: now >= stationExpires, outages, outagesStale: now >= outagesExpire,
       today: now ? kyivDate(new Date(now)) : "", now,
-      historySupported, revision, schedulesRevision, telemetry, powerHistory, chargeHistory, outageHistory, request,
+      historySupported, revision, schedulesRevision, telemetry, scheduleOverlay, powerHistory, chargeHistory, outageHistory, request,
     }}>
       {children}
     </DashboardContext.Provider>

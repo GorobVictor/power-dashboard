@@ -8,6 +8,7 @@ import { database } from "./db.ts";
 import { createLogger, errorFields } from "./logger.ts";
 import { isQueue, isScheduleDate } from "./outages/schedules.ts";
 import { readPowerEvents } from "./power/repository.ts";
+import { findLatestScheduleVersions } from "./outages/repository.ts";
 import { getOutageHistory } from "./outages/service.ts";
 import { findTelemetryHistory } from "./stations/repository.ts";
 
@@ -37,6 +38,10 @@ function parseRequest(data: string): DashboardRequest | null {
     if (request.period === "dates" && isScheduleDate(request.from) && isScheduleDate(request.to) && request.from <= request.to) {
       return { type: "telemetry", period: "dates", from: request.from, to: request.to };
     }
+  }
+  if (request?.type === "scheduleOverlay" && isScheduleDate(request.from) && isScheduleDate(request.to)
+    && request.from <= request.to && isQueue(request.queue)) {
+    return { type: "scheduleOverlay", from: request.from, to: request.to, queue: request.queue };
   }
   if (request?.type === "powerHistory" && Number.isSafeInteger(request.start) && Number.isSafeInteger(request.end)
     && request.start >= 0 && request.start < request.end && request.end <= 8_640_000_000_000_000) {
@@ -76,6 +81,10 @@ async function loadHistory(request: DashboardRequest, client: SocketClient): Pro
       } finally {
         client.telemetrySamples.delete(request.type);
       }
+    }
+    if (request.type === "scheduleOverlay") {
+      const versions = await findLatestScheduleVersions(database(), request.from, request.to, request.queue);
+      return { ...request, value: versions.map((version) => ({ ...version, observedAt: version.observedAt.toISOString() })) };
     }
     if (request.type === "powerHistory") return { ...request, value: await readPowerEvents(database(), request.start, request.end) };
     const versions = await getOutageHistory(request.date, request.queue);
