@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 import { useDashboardLive } from "./live";
 
 const colors = { online: "var(--success)", offline: "var(--danger)", unknown: "var(--muted-foreground)" } as const;
-const opacity = { online: 32, offline: 20, unknown: 12 } as const;
+const backgrounds = {
+  online: "linear-gradient(180deg, color-mix(in srgb, var(--success) 20%, transparent), color-mix(in srgb, var(--success) 6%, transparent))",
+  offline: "linear-gradient(180deg, color-mix(in srgb, var(--danger) 20%, transparent), color-mix(in srgb, var(--danger) 6%, transparent))",
+  unknown: "color-mix(in srgb, var(--muted-foreground) 8%, transparent)",
+} as const;
 const labels = { online: "Світло є", offline: "Світла немає", unknown: "Невідомо" } as const;
 const dateTime = new Intl.DateTimeFormat("uk-UA", { timeZone: "Europe/Kyiv", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const week = 7 * 24 * 60 * 60 * 1_000;
@@ -30,9 +34,9 @@ function usePowerIntervals(start: number, end: number) {
 
 export function PowerChartOverlay({ start, end }: { start: number; end: number }) {
   const { intervals } = usePowerIntervals(start, end);
-  return <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm">
+  return <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
     {intervals.map(({ status, start: from, end: to }) => <span key={from} className="absolute inset-y-0"
-      style={{ left: `${(from - start) / (end - start) * 100}%`, width: `${(to - from) / (end - start) * 100}%`, background: `color-mix(in srgb, ${colors[status]} ${opacity[status]}%, transparent)` }}>
+      style={{ left: `${(from - start) / (end - start) * 100}%`, width: `${(to - from) / (end - start) * 100}%`, background: backgrounds[status] }}>
     </span>)}
   </div>;
 }

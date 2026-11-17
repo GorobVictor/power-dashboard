@@ -9,6 +9,7 @@ import { shiftTelemetryDate, telemetryPeriods, type TelemetryHistory, type Telem
 import { cn } from "@/lib/utils";
 import { isScheduleDate, kyivDate, timeZone } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
+import { HourAxis } from "./hour-axis";
 import { ScheduleHistoryBands, ScheduleHistoryLegend } from "./schedule-overlay";
 import { PowerChartLegend, PowerChartOverlay } from "./power-timeline";
 import { mobilePanelClassName, Timestamp } from "./panel";
@@ -72,6 +73,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
   title: string; unit: string; history: TelemetryHistory; calendar: boolean; series: Series[];
   overlay?: ChartOverlay; background?: ReactNode;
 }) {
+  const { now } = useDashboardLive();
   const label = useId();
   const instructions = useId();
   const [selection, setSelection] = useState<number>();
@@ -111,7 +113,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
     <figure className="min-w-0">
       <figcaption id={label} className="mb-2 flex items-baseline justify-between gap-2 text-sm font-semibold">
         <span>{title} <span className="text-xs font-normal text-muted-foreground">{unit}</span></span>
-        {overlay && (
+        {now >= start && now < end && (
           <span className="flex items-center gap-1.5 text-[0.6875rem] font-normal text-muted-foreground">
             <span aria-hidden="true" className="h-2.5 border-l border-dashed border-foreground/70" />Зараз
           </span>
@@ -127,7 +129,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
             </div>
             <div
               role="group" tabIndex={available.length ? 0 : undefined} aria-labelledby={label} aria-describedby={available.length ? instructions : undefined}
-              className={cn("relative touch-pan-y rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              className={cn("relative touch-pan-y rounded-xl bg-muted/60 outline-none ring-1 ring-inset ring-border/70 focus-visible:ring-2 focus-visible:ring-ring",
                 overlay ? "h-28 sm:h-32 xl:h-36" : "h-34 sm:h-40 lg:h-32 xl:h-40")}
               onPointerMove={(event) => {
                 if (event.pointerType !== "mouse" && event.buttons !== 1) return;
@@ -156,9 +158,8 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
                 setSelection(Math.floor(available[next].time / bucket));
               }}
             >
-              {overlay?.background ?? background}
               <PowerChartOverlay start={start} end={end} />
-              <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-visible" viewBox="0 0 1000 200" preserveAspectRatio="none">
+              <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-hidden rounded-xl" viewBox="0 0 1000 200" preserveAspectRatio="none">
                 {plot.ticks.map((value) => (
                   <path key={value} d={`M0 ${plot.y(value)}H1000`} stroke="var(--border)" strokeDasharray="3 5" opacity="0.65" vectorEffect="non-scaling-stroke" />
                 ))}
@@ -167,9 +168,9 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
                     strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                 ))}
               </svg>
-              {overlay && overlay.now >= start && overlay.now < end && (
+              {now >= start && now < end && (
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-dashed border-foreground/70"
-                  style={{ left: `${plot.x(overlay.now) / 10}%` }} />
+                  style={{ left: `${plot.x(now) / 10}%` }} />
               )}
               {active && (
                 <div className="pointer-events-none absolute inset-y-0 border-l border-dashed border-muted-foreground"
@@ -182,14 +183,20 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
                 </div>
               )}
             </div>
-            <div aria-hidden="true" className="col-start-2 mt-1.5 flex justify-between gap-1 text-xs text-muted-foreground tabular-nums">
+            {(overlay?.background || background) && <div className="col-start-2 mt-2">
+              <p className="mb-1 text-[0.6875rem] text-muted-foreground">План відключень</p>
+              <div className="relative h-3.5">
+                {overlay?.background ?? background}
+                {now >= start && now < end && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-dashed border-foreground/70" style={{ left: `${plot.x(now) / 10}%` }} />}
+              </div>
+            </div>}
+            {calendar && days === 1 ? <div className="col-start-2 mt-1.5"><HourAxis start={start} end={end} /></div> : <div aria-hidden="true" className="col-start-2 mt-1.5 flex justify-between gap-1 text-xs text-muted-foreground tabular-nums">
               {tickFractions.map((fraction, index) => (
                 <span key={fraction} className={tickFractions.length === 5 && index % 2 ? "hidden sm:inline" : undefined}>
-                  {calendar && days === 1 && fraction === 1 ? "24:00"
-                    : axisFormat.format(fraction === 1 && calendar ? end - 1 : start + duration * fraction)}
+                  {axisFormat.format(fraction === 1 && calendar ? end - 1 : start + duration * fraction)}
                 </span>
               ))}
-            </div>
+            </div>}
           </div>
           {overlay ? shown?.socPct != null ? (
             <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground tabular-nums" aria-live="polite">
@@ -257,10 +264,10 @@ export function TelemetryPanel({ queue, queuePicker }: { queue: string | null; q
   const historyStart = history?.start;
   const historyEnd = history?.end;
   useEffect(() => {
-    if (calendar && historyStart !== undefined && historyEnd !== undefined && connection === "connected" && historySupported) {
+    if (historyStart !== undefined && historyEnd !== undefined && connection === "connected" && historySupported) {
       request({ type: "powerHistory", start: historyStart, end: historyEnd });
     }
-  }, [calendar, historyStart, historyEnd, connection, historySupported, request, revision]);
+  }, [historyStart, historyEnd, connection, historySupported, request, revision]);
   const scheduleFrom = historyStart === undefined ? "" : kyivDate(new Date(historyStart));
   const scheduleTo = historyEnd === undefined ? "" : kyivDate(new Date(historyEnd - 1));
   useEffect(() => {
@@ -270,7 +277,7 @@ export function TelemetryPanel({ queue, queuePicker }: { queue: string | null; q
   }, [queue, scheduleFrom, scheduleTo, connection, historySupported, request, revision, schedulesRevision]);
   const scheduleData = queue && scheduleOverlay?.queue === queue && scheduleOverlay.from === scheduleFrom && scheduleOverlay.to === scheduleTo
     ? scheduleOverlay.value : undefined;
-  const scheduleBackground = history && scheduleData ? <ScheduleHistoryBands schedules={scheduleData} start={history.start} end={history.end} /> : undefined;
+  const scheduleBackground = history && queue ? <ScheduleHistoryBands schedules={scheduleData ?? []} start={history.start} end={history.end} /> : undefined;
   const rangeLabel = filter.period === "dates" && fullDateFormat.formatRange(new Date(filter.from), new Date(filter.to));
   const message = station?.kind === "unconfigured" || station?.kind === "missing" ? "Історія з’явиться після налаштування станції."
     : connection === "disconnected" ? "Очікуємо на відновлення з’єднання."

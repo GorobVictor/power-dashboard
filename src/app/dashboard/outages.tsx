@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { clockTime, kyivMinute, minutesPerDay, outageIntervals, outageQueues, scheduleBands, scheduleIntervals, type ScheduleInterval } from "@/server/outages/intervals";
 import { isQueue, isScheduleDate, operator, timeZone, type ScheduleContent } from "@/server/outages/schedules";
 import { useDashboardLive } from "./live";
+import { HourAxis } from "./hour-axis";
 import { PowerChartLegend, PowerChartOverlay } from "./power-timeline";
 import { mobilePanelClassName, StatusBadge, Timestamp } from "./panel";
 import { compareSchedules } from "./schedule-insights";
@@ -30,7 +31,7 @@ type Intervals = ReturnType<typeof outageIntervals>;
 type ChargeHistory = { history: TelemetryHistory; now: number; emptyMessage: string };
 
 const scheduleColors = {
-  power: { label: "Зі світлом", background: "var(--card)" },
+  power: { label: "Зі світлом", background: "var(--muted)" },
   outage: { label: "Без світла", background: "color-mix(in srgb, #9ca3af 38%, var(--card))" },
   possible: { label: "Можливе відключення", background: "repeating-linear-gradient(135deg, var(--schedule-unknown) 0 4px, var(--border) 4px 6px)" },
   unknown: { label: "Без даних", background: "var(--schedule-unknown)" },
@@ -72,11 +73,11 @@ function ScheduleBands({ intervals, day }: { intervals: ScheduleInterval[]; day?
   const duration = day ? (day.end - day.start) / 60_000 : minutesPerDay;
   const bands = day ? scheduleBands(intervals, day) : intervals;
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm ring-1 ring-inset ring-border">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-md ring-1 ring-inset ring-border">
       {bands.map(({ start, end, kind }) => (
         <span key={start} className="absolute inset-y-0 overflow-hidden"
           style={{ left: `${start / duration * 100}%`, width: `${(end - start) / duration * 100}%`, background: scheduleColors[kind].background }}>
-          {kind === "outage" && <span className="absolute inset-0 flex items-center justify-center text-foreground/70"><ZapOff className="h-auto max-h-full w-full max-w-5 shrink-0" /></span>}
+          {kind === "outage" && <span className="absolute inset-0 flex items-center justify-center text-foreground/80"><ZapOff className="size-3 max-w-full shrink-0" /></span>}
         </span>
       ))}
     </div>
@@ -96,9 +97,7 @@ function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; n
             style={{ left: `${now / minutesPerDay * 100}%` }} />
         )}
       </div>
-      <div className="flex justify-between text-[0.625rem] text-muted-foreground tabular-nums" aria-hidden="true">
-        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
-      </div>
+      <HourAxis />
       {day && <PowerChartLegend start={day.start} end={day.end} compact flush />}
     </div>
   );
