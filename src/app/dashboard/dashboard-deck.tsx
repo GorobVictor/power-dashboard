@@ -128,7 +128,7 @@ export function DashboardDeck() {
         <div id="energy-overview" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-overview" : undefined} aria-owns={mobile ? "station-details" : undefined}
           className={cn("flex min-w-0 flex-col gap-2.5 lg:gap-3", panelClass("overview"))}>
           <BatteryOverview />
-          <PowerFlow className={active !== "archive" ? "lg:grow" : undefined} queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
+          <PowerFlow className="lg:grow" queue={outageQueue.queue} schedules={schedules} onSchedule={() => { selectPanel("schedule"); if (!mobile) requestAnimationFrame(() => document.getElementById("outage-schedule")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
         </div>
         <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3">
           <section id="outage-schedule" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Графік відключень"} className={cn(panelFrame, panelClass("schedule"), active === "archive" && "lg:hidden")}>
@@ -137,7 +137,7 @@ export function DashboardDeck() {
           <section id="outage-archive" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-schedule" : undefined} aria-label={mobile ? undefined : "Історія відключень"} className={cn(panelFrame, panelClass("archive"), active !== "archive" && "lg:hidden")}>
             <OutageHistoryPanel {...outageQueue} onBack={() => selectPanel("schedule")} />
           </section>
-          <div className={cn("min-w-0 max-lg:mt-3", active !== "archive" && "lg:grow", panelClass("overview"))}><BatteryPanel className={active !== "archive" ? "lg:h-full" : undefined} /></div>
+          <div className={cn("min-w-0 max-lg:mt-3 lg:grow", panelClass("overview"))}><BatteryPanel className="lg:h-full" /></div>
         </div>
         <div className="hidden lg:col-span-2 lg:block"><EnergyCounters /></div>
         <section id="station-telemetry" role={mobile ? "tabpanel" : undefined} aria-labelledby={mobile ? "dashboard-tab-telemetry" : undefined} aria-label={mobile ? undefined : "Телеметрія станції"} className={cn(panelFrame, "lg:col-span-2", panelClass("telemetry"))}>
