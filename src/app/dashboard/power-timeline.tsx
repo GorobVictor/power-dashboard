@@ -32,9 +32,9 @@ function usePowerIntervals(start: number, end: number) {
   return { intervals, now };
 }
 
-export function PowerChartOverlay({ start, end }: { start: number; end: number }) {
+export function PowerChartOverlay({ start, end, rounded = false }: { start: number; end: number; rounded?: boolean }) {
   const { intervals } = usePowerIntervals(start, end);
-  return <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+  return <div aria-hidden="true" className={cn("pointer-events-none absolute inset-0 overflow-hidden", rounded && "rounded-md")}>
     {intervals.map(({ status, start: from, end: to }) => <span key={from} className="absolute inset-y-0"
       style={{ left: `${(from - start) / (end - start) * 100}%`, width: `${(to - from) / (end - start) * 100}%`, background: backgrounds[status] }}>
     </span>)}

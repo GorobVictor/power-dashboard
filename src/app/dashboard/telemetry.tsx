@@ -129,7 +129,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
             </div>
             <div
               role="group" tabIndex={available.length ? 0 : undefined} aria-labelledby={label} aria-describedby={available.length ? instructions : undefined}
-              className={cn("relative touch-pan-y rounded-xl bg-muted/60 outline-none ring-1 ring-inset ring-border/70 focus-visible:ring-2 focus-visible:ring-ring",
+              className={cn("relative touch-pan-y bg-muted/60 outline-none ring-1 ring-inset ring-border/70 focus-visible:ring-2 focus-visible:ring-ring",
                 overlay ? "h-28 sm:h-32 xl:h-36" : "h-34 sm:h-40 lg:h-32 xl:h-40")}
               onPointerMove={(event) => {
                 if (event.pointerType !== "mouse" && event.buttons !== 1) return;
@@ -159,7 +159,7 @@ function HistoryChart({ title, unit, history, calendar, series, overlay, backgro
               }}
             >
               <PowerChartOverlay start={start} end={end} />
-              <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-hidden rounded-xl" viewBox="0 0 1000 200" preserveAspectRatio="none">
+              <svg aria-hidden="true" className="pointer-events-none relative h-full w-full overflow-hidden" viewBox="0 0 1000 200" preserveAspectRatio="none">
                 {plot.ticks.map((value) => (
                   <path key={value} d={`M0 ${plot.y(value)}H1000`} stroke="var(--border)" strokeDasharray="3 5" opacity="0.65" vectorEffect="non-scaling-stroke" />
                 ))}

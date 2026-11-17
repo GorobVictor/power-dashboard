@@ -91,7 +91,7 @@ function ScheduleTimeline({ intervals, now }: { intervals: ScheduleInterval[]; n
     <div className="space-y-1">
       <div aria-hidden="true" className="relative h-4">
         <ScheduleBands intervals={intervals} />
-        {day && <PowerChartOverlay start={day.start} end={day.end} />}
+        {day && <PowerChartOverlay start={day.start} end={day.end} rounded />}
         {now !== undefined && (
           <span title="Зараз" className="absolute inset-y-0 border-l border-dashed border-foreground"
             style={{ left: `${now / minutesPerDay * 100}%` }} />
